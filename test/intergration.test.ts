@@ -5,8 +5,11 @@ import { Lexer } from '../src/Lexer';
 import { Parser } from '../src/parser';
 import { ARM64CodeGenerator } from '../src/codegen';
 
-
-describe('Compiler Integration Tests', () => {
+/**
+ * Integration test for the ARM64 compiler.
+ * Supports macOS (ARM64) and Linux (ARM64) platforms.
+ */
+describe('ARM64 Compiler Integration Tests', () => {
   const testOutputDir = path.join(__dirname, 'integration-output');
   
   
@@ -17,10 +20,10 @@ describe('Compiler Integration Tests', () => {
   }
   
   
-  const isMacOSARM64 = process.platform === 'darwin' && process.arch === 'arm64';
-  const runOnMacOSARM64 = isMacOSARM64 ? it : it.skip;
+  const isARM64 = process.arch === 'arm64';
+  const runIfARM64 = isARM64 ? it : it.skip;
   
-  beforeAll(() => { 
+  beforeAll(() => {
     ensureDirExists(testOutputDir);
   });
   
@@ -31,7 +34,7 @@ describe('Compiler Integration Tests', () => {
     const lexer = new Lexer(sourceCode);
     const tokens = lexer.scanTokens();
     const parser = new Parser(tokens);
-    const program = parser.parse();
+    const program = parser.parse(); 
     
     const codeGen = new ARM64CodeGenerator();
     const assembly = codeGen.generate(program);
@@ -47,19 +50,45 @@ describe('Compiler Integration Tests', () => {
     const executablePath = path.join(testOutputDir, testName);
     
     
-    execSync(`as -o ${objectPath} ${assemblyPath}`, { stdio: 'inherit' });
- 
+    if (process.platform === 'darwin') {
+      
+      execSync(`as -o ${objectPath} ${assemblyPath}`, { stdio: 'inherit' });
+    } else if (process.platform === 'linux') {
+      
+      try {
+        execSync(`as -o ${objectPath} ${assemblyPath}`, { stdio: 'inherit' });
+      } catch (error) {
+        
+        execSync(`aarch64-linux-gnu-as -o ${objectPath} ${assemblyPath}`, { stdio: 'inherit' });
+      }
+    } else {
+      throw new Error(`Unsupported platform: ${process.platform}`);
+    }
     
-    execSync(`ld -o ${executablePath} ${objectPath} -lSystem -syslibroot $(xcrun -sdk macosx --show-sdk-path) -e _main -arch arm64`, 
-      { stdio: 'inherit' });
+    
+    if (process.platform === 'darwin') {
+      
+      execSync(`ld -o ${executablePath} ${objectPath} -lSystem -syslibroot $(xcrun -sdk macosx --show-sdk-path) -e _main -arch arm64`, 
+        { stdio: 'inherit' });
+    } else if (process.platform === 'linux') {
+      
+      try {
+        execSync(`gcc -o ${executablePath} ${objectPath}`, { stdio: 'inherit' });
+      } catch (error) {
+        
+        execSync(`ld -o ${executablePath} ${objectPath} -lc --dynamic-linker=/lib/ld-linux-aarch64.so.1 -e main`, 
+          { stdio: 'inherit' });
+      }
+    } else {
+      throw new Error(`Unsupported platform: ${process.platform}`);
+    }
     
     
     return execSync(executablePath).toString().trim();
   }
-
   
-  runOnMacOSARM64('should compile and execute a comprehensive program with all language features', async () => { 
-    
+  
+  runIfARM64('should compile and execute a comprehensive program with all language features', async () => {
     const sourceCode = `
       int Square(int arg)
       {
@@ -82,9 +111,8 @@ describe('Compiler Integration Tests', () => {
       }
     `;
     
-    const output = await compileAndRun(sourceCode, 'intergration_test');
-     
-    
+    const output = await compileAndRun(sourceCode, 'integration_test');
     expect(output).toBe('5');
+
   });
 });
