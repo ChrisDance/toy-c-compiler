@@ -8,6 +8,8 @@ export enum NodeType {
   ReturnStatement = "ReturnStatement",
   VariableDeclaration = "VariableDeclaration",
   IfStatement = "IfStatement",
+  AssignmentStatement = "AssignmentStatement",
+  WhileStatement = "WhileStatement",
   FunctionCall = "FunctionCall",
   BinaryExpression = "BinaryExpression",
   Identifier = "Identifier",
@@ -16,6 +18,12 @@ export enum NodeType {
 
 export interface Node {
   type: NodeType;
+}
+
+export interface AssignmentStatement extends Node {
+  type: NodeType.AssignmentStatement;
+  target: string; // Variable name being assigned to
+  value: Expression;
 }
 
 export interface Program extends Node {
@@ -37,6 +45,12 @@ export interface Parameter extends Node {
   paramType: string;
 }
 
+export interface WhileStatement extends Node {
+  type: NodeType.WhileStatement;
+  condition: Expression;
+  body: Statement;
+}
+
 export interface BlockStatement extends Node {
   type: NodeType.BlockStatement;
   statements: Statement[];
@@ -47,6 +61,8 @@ export type Statement =
   | VariableDeclaration
   | ExpressionStatement
   | IfStatement
+  | AssignmentStatement
+  | WhileStatement
   | BlockStatement;
 
 export interface ReturnStatement extends Node {
@@ -125,12 +141,26 @@ export class Parser {
     };
   }
 
+  private parseWhileStatement(): WhileStatement {
+    this.consume(TokenType.LEFT_PAREN, "Expect '(' after 'while'.");
+    const condition = this.parseExpression();
+    this.consume(TokenType.RIGHT_PAREN, "Expect ')' after while condition.");
+
+    const body = this.parseStatement();
+
+    return {
+      type: NodeType.WhileStatement,
+      condition,
+      body,
+    };
+  }
+
   private parseFunction(): FunctionDeclaration {
     this.consume(TokenType.INT, "Expect return type.");
 
     const nameToken = this.consume(
       TokenType.IDENTIFIER,
-      "Expect function name."
+      "Expect function name.",
     );
 
     this.consume(TokenType.LEFT_PAREN, "Expect '(' after function name.");
@@ -143,7 +173,7 @@ export class Parser {
 
       const paramName = this.consume(
         TokenType.IDENTIFIER,
-        "Expect parameter name."
+        "Expect parameter name.",
       );
 
       params.push({
@@ -194,6 +224,10 @@ export class Parser {
       return this.parseIfStatement();
     }
 
+    if (this.match(TokenType.WHILE)) {
+      return this.parseWhileStatement();
+    }
+
     if (this.check(TokenType.INT)) {
       this.advance();
       return this.parseVariableDeclaration();
@@ -201,6 +235,27 @@ export class Parser {
 
     if (this.match(TokenType.LEFT_BRACE)) {
       return this.parseBlock();
+    }
+
+    if (this.check(TokenType.IDENTIFIER)) {
+      const checkpoint = this.current;
+      const identifier = this.advance();
+
+      if (this.match(TokenType.EQUAL)) {
+        // It's an assignment
+        const value = this.parseExpression();
+        this.consume(TokenType.SEMICOLON, "Expect ';' after assignment.");
+
+        return {
+          type: NodeType.AssignmentStatement,
+          target: identifier.lexeme,
+          value,
+        };
+      } else {
+        // Not an assignment, backtrack and parse as expression
+        this.current = checkpoint;
+        return this.parseExpressionStatement();
+      }
     }
 
     return this.parseExpressionStatement();
@@ -240,7 +295,7 @@ export class Parser {
     /* INT token was already consumed in parseStatement */
     const name = this.consume(
       TokenType.IDENTIFIER,
-      "Expect variable name."
+      "Expect variable name.",
     ).lexeme;
 
     this.consume(TokenType.EQUAL, "Expect '=' after variable name.");
@@ -278,7 +333,7 @@ export class Parser {
       this.match(
         TokenType.LESS_THAN,
         TokenType.GREATER_THAN,
-        TokenType.EQUAL_EQUAL
+        TokenType.EQUAL_EQUAL,
       )
     ) {
       const operator = this.previous().lexeme;

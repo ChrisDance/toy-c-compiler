@@ -2,6 +2,7 @@ import {
   BinaryExpression,
   BlockStatement,
   Expression,
+  WhileStatement,
   FunctionCall,
   FunctionDeclaration,
   Identifier,
@@ -75,6 +76,30 @@ export class ARM64CodeGenerator {
     return this.output.join("\n");
   }
 
+  private generateAssignmentStatement(stmt: any): void {
+    // Generate the value expression
+    const valueCode = this.generateExpression(stmt.value);
+    this.addLines(valueCode);
+
+    // Get the variable location
+    const varLocation = this.getVarLocation(this.currentFunction, stmt.target);
+
+    if (!varLocation) {
+      throw new Error(
+        `Variable not found: ${stmt.target} in function ${this.currentFunction}`,
+      );
+    }
+
+    const { frameRelative, offset } = varLocation;
+
+    // Store the result
+    if (frameRelative) {
+      this.addLine(`\tstur\tw0, [x29, #${offset}]`);
+    } else {
+      this.addLine(`\tstr\tw0, [sp, #${offset}]`);
+    }
+  }
+
   private generateFunction(func: FunctionDeclaration): void {
     this.currentFunction = func.name;
     this.varLocationMap.set(func.name, new Map());
@@ -84,7 +109,7 @@ export class ARM64CodeGenerator {
 
     this.addLine("");
     this.addLine(
-      `\t.globl\t_${func.name}\t\t\t\t\t ; -- Begin function ${func.name}`
+      `\t.globl\t_${func.name}\t\t\t\t\t ; -- Begin function ${func.name}`,
     );
     this.addLine("\t.p2align\t2");
     this.addLine(`_${func.name}:\t\t\t\t\t\t ; @${func.name}`);
@@ -147,7 +172,7 @@ export class ARM64CodeGenerator {
             this.addLine(
               `\tmov\tw8, #${
                 stmt.init.value
-              }\t\t\t\t; =0x${stmt.init.value.toString(16)}`
+              }\t\t\t\t; =0x${stmt.init.value.toString(16)}`,
             );
             this.addLine(`\tstur\tw8, [x29, #${offset}]`);
           } else {
@@ -163,7 +188,7 @@ export class ARM64CodeGenerator {
             this.addLine(
               `\tmov\tw8, #${
                 stmt.init.value
-              }\t\t\t\t; =0x${stmt.init.value.toString(16)}`
+              }\t\t\t\t; =0x${stmt.init.value.toString(16)}`,
             );
             this.addLine(`\tstr\tw8, [sp, #${offset}]`);
           } else {
@@ -178,9 +203,15 @@ export class ARM64CodeGenerator {
         const exprCode = this.generateExpression(stmt.expression);
         this.addLines(exprCode);
         break;
-
+      case "AssignmentStatement": // Use the enum value
+        this.generateAssignmentStatement(stmt);
+        break;
       case "IfStatement":
         this.generateIfStatement(stmt);
+        break;
+
+      case "WhileStatement":
+        this.generateWhileStatement(stmt);
         break;
     }
   }
@@ -198,6 +229,35 @@ export class ARM64CodeGenerator {
     this.nextOffsetMap.set(funcName, newOffset);
 
     return currentOffset;
+  }
+
+  private generateWhileStatement(stmt: WhileStatement): void {
+    const loopStart = this.generateLabel("loop_start");
+    const loopEnd = this.generateLabel("loop_end");
+
+    // Loop start label
+    this.addLine(`${loopStart}:`);
+
+    // Generate condition
+    const conditionCode = this.generateExpression(stmt.condition);
+    this.addLines(conditionCode);
+
+    // Jump to end if condition is false (0)
+    this.addLine("\tcmp\tw0, #0");
+    this.addLine(`\tbeq\t${loopEnd}`);
+
+    // Generate loop body
+    if (stmt.body.type === "BlockStatement") {
+      this.generateBlock(stmt.body);
+    } else {
+      this.generateStatement(stmt.body);
+    }
+
+    // Jump back to start
+    this.addLine(`\tb\t${loopStart}`);
+
+    // Loop end label
+    this.addLine(`${loopEnd}:`);
   }
 
   private generateIfStatement(stmt: IfStatement): void {
@@ -318,7 +378,7 @@ export class ARM64CodeGenerator {
 
     if (!varLocation) {
       throw new Error(
-        `Variable not found: ${expr.name} in function ${this.currentFunction}`
+        `Variable not found: ${expr.name} in function ${this.currentFunction}`,
       );
     }
 
@@ -353,7 +413,7 @@ export class ARM64CodeGenerator {
     funcName: string,
     varName: string,
     frameRelative: boolean,
-    offset: number
+    offset: number,
   ): void {
     let varMap = this.varLocationMap.get(funcName);
 
@@ -367,7 +427,7 @@ export class ARM64CodeGenerator {
 
   private getVarLocation(
     funcName: string,
-    varName: string
+    varName: string,
   ): { frameRelative: boolean; offset: number } | undefined {
     const varMap = this.varLocationMap.get(funcName);
 

@@ -3,6 +3,7 @@ export enum TokenType {
   RETURN = "RETURN",
   IF = "IF",
   ELSE = "ELSE",
+  WHILE = "WHILE",
 
   IDENTIFIER = "IDENTIFIER",
   NUMBER = "NUMBER",
@@ -122,7 +123,7 @@ export class Lexer {
           console.error(
             `Unexpected character: '${c}' (code ${c.charCodeAt(0)}) at line ${
               this.line
-            }`
+            }`,
           );
         }
         break;
@@ -143,6 +144,8 @@ export class Lexer {
       type = TokenType.IF;
     } else if (text === "else") {
       type = TokenType.ELSE;
+    } else if (text === "while") {
+      type = TokenType.WHILE;
     }
 
     this.addToken(type);
@@ -159,7 +162,7 @@ export class Lexer {
 
     this.addToken(
       TokenType.NUMBER,
-      parseFloat(this.source.substring(this.start, this.current))
+      parseFloat(this.source.substring(this.start, this.current)),
     );
   }
 
