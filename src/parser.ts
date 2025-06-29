@@ -9,6 +9,7 @@ export enum NodeType {
   VariableDeclaration = "VariableDeclaration",
   IfStatement = "IfStatement",
   AssignmentStatement = "AssignmentStatement",
+  ExpressionStatement = "ExpressionStatement",
   WhileStatement = "WhileStatement",
   FunctionCall = "FunctionCall",
   BinaryExpression = "BinaryExpression",
@@ -77,8 +78,8 @@ export interface VariableDeclaration extends Node {
   init: Expression;
 }
 
-export interface ExpressionStatement {
-  type: "ExpressionStatement";
+export interface ExpressionStatement extends Node {
+  type: NodeType.ExpressionStatement;
   expression: Expression;
 }
 
@@ -317,7 +318,7 @@ export class Parser {
     this.consume(TokenType.SEMICOLON, "Expect ';' after expression.");
 
     return {
-      type: "ExpressionStatement",
+      type: NodeType.ExpressionStatement,
       expression: expr,
     };
   }

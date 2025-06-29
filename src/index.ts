@@ -2,6 +2,7 @@ import { writeFileSync } from "fs";
 import { ARM64CodeGenerator } from "./codegen";
 import { Lexer } from "./Lexer";
 import { Parser } from "./parser";
+import { BasicOptimizer } from "./optimiser";
 
 const input = `
 
@@ -28,24 +29,29 @@ const input = `
     `;
 
 const sourceCode2 = `
-int countdown() {
-
-
-int i = 10;
-while (i > 0) {
-    i = i - 1;
-}
-    return 9;
-}
-
 int main() {
-    printf(countdown());
-    return  0;
+  int x = 2 + 3;
+  if (4 > 0) {
+    x = x * 1;
+  } else {
+    x = 999;
+  }
+  printf(x);
+  return 0;
 }
 `;
 
 const tokens = new Lexer(sourceCode2).scanTokens();
 const ast = new Parser(tokens).parse();
-const asm = new ARM64CodeGenerator().generate(ast);
+const optimizer = new BasicOptimizer();
+
+const { optimized: optimizedAst, stats } = optimizer.optimize(ast);
+
+console.log("Optimization Statistics:");
+console.log(`Constant folding optimizations: ${stats.constantFolding}`);
+console.log(`Dead code eliminations: ${stats.deadCodeElimination}`);
+console.log(`Algebraic simplifications: ${stats.algebraicSimplification}`);
+
+const asm = new ARM64CodeGenerator().generate(optimizedAst);
 
 writeFileSync("output.s", asm);
