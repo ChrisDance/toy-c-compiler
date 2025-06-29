@@ -118,20 +118,22 @@ describe("ARM64 Compiler Integration Tests", () => {
 
 
       int i = 10;
-      while (i > 0) {
+      while (i > 3) {
           i = i - 1;
       }
-          return 9;
+          return i;
       }
 
       int main() {
-          printf(return countdown());
+          printf(countdown());
           return  0;
       }
       `;
 
-      const output = await compileAndRun(sourceCode2, "integration_test");
-      expect(output).toBe("9");
+      const output1 = await compileAndRun(sourceCode, "integration_test1");
+      expect(output1).toBe("5");
+      const output2 = await compileAndRun(sourceCode2, "integration_test2");
+      expect(output2).toBe("3");
     },
   );
 });

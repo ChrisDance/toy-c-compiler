@@ -39,7 +39,7 @@ while (i > 0) {
 }
 
 int main() {
-    printf(return countdown());
+    printf(countdown());
     return  0;
 }
 `;
