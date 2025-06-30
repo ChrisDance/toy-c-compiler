@@ -95,7 +95,12 @@ export class Lexer {
         this.addToken(TokenType.MINUS);
         break;
       case "/":
-        this.addToken(TokenType.DIVIDE);
+        if (this.peek() === "/") {
+          while (this.advance() != "\n") {}
+          console.log("NEWLINE");
+        } else {
+          this.addToken(TokenType.DIVIDE);
+        }
         break;
       case "<":
         this.addToken(TokenType.LESS_THAN);

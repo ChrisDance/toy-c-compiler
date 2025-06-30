@@ -5,16 +5,15 @@ export const working = [
   {
     code: `
 
- int main()
- {
-  int i = 7;
-  int k = &i;
-  printf(*k);
-  return 0;
- }
+  int main()
+  {
+   int i = 7;
+   int k = &i;
+   printf(*k);
+   return 0;
+  }
 
-
- `,
+  `,
     output: 7,
   },
 

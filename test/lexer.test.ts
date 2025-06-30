@@ -284,6 +284,21 @@ describe("Lexer", () => {
     expect(tokens[2].lexeme).toBe("ptr2");
   });
 
+  test("check comments", () => {
+    const lexer = new Lexer(`
+
+      int main() {
+        // comment;
+        return 0; // nah
+      }
+
+
+      `);
+    const tokens = lexer.scanTokens();
+    console.log(tokens);
+    expect(tokens.length).toBe(10);
+  });
+
   test("should tokenize complete pointer function", () => {
     const input = `
       int* allocateInt() {

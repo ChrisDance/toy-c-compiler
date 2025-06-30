@@ -14,6 +14,7 @@ import {
   Program,
   ReturnStatement,
   Statement,
+  UnaryExpression,
   VariableDeclaration,
   WhileStatement,
 } from "./parser";
@@ -26,6 +27,7 @@ export interface OptimizationStats {
   algebraicSimplification: number;
   totalOptimizations: number;
   functionsRemoved: number;
+  pointersDetected: number; // New: track pointer detection
 }
 
 interface ConstantMap {
@@ -54,6 +56,11 @@ export class IterativeOptimizer {
   private currentPhase!: OptimizationPhase;
   private phaseChanged: boolean = false;
 
+  // Pointer-related tracking
+  private hasPointers: boolean = false;
+  private pointerVariables!: Set<string>; // Variables that are pointers
+  private pointerReferencedVariables!: Set<string>; // Variables that have their address taken
+
   constructor() {
     this.resetStats();
   }
@@ -67,9 +74,12 @@ export class IterativeOptimizer {
       algebraicSimplification: 0,
       totalOptimizations: 0,
       functionsRemoved: 0,
+      pointersDetected: 0,
     };
     this.constantValues = {};
     this.usedVariables = new Set();
+    this.pointerVariables = new Set();
+    this.pointerReferencedVariables = new Set();
     this.resetPassStats();
   }
 
@@ -85,6 +95,7 @@ export class IterativeOptimizer {
   functionQueue: FunctionDeclaration[] = [];
   _program!: Program;
   functionPass = false;
+
   optimize(
     program: Program,
     maxPasses: number = 10,
@@ -93,6 +104,25 @@ export class IterativeOptimizer {
 
     let currentProgram = this.deepClone(program);
     this._program = currentProgram;
+
+    // First pass: detect pointers throughout the program
+    console.log("\n=== Pointer Detection Phase ===");
+    this.detectPointers(currentProgram);
+
+    if (this.hasPointers) {
+      console.log(
+        `Pointers detected! Found pointer variables: ${Array.from(this.pointerVariables).join(", ")}`,
+      );
+      console.log(
+        `Variables with address taken: ${Array.from(this.pointerReferencedVariables).join(", ")}`,
+      );
+      console.log("Optimization will be DISABLED for pointer-related code");
+      this.stats.pointersDetected =
+        this.pointerVariables.size + this.pointerReferencedVariables.size;
+    } else {
+      console.log("No pointers detected, full optimization enabled");
+    }
+
     let passChanged = true;
 
     while (passChanged && this.stats.passes < maxPasses) {
@@ -231,6 +261,245 @@ export class IterativeOptimizer {
     return { optimized: currentProgram, stats: { ...this.stats } };
   }
 
+  // =================== POINTER DETECTION ===================
+
+  /**
+   * Detects all pointer usage in the program and marks relevant variables
+   */
+  private detectPointers(program: Program): void {
+    this.hasPointers = false;
+    this.pointerVariables.clear();
+    this.pointerReferencedVariables.clear();
+
+    for (const func of program.functions) {
+      this.detectPointersInFunction(func);
+    }
+  }
+
+  private detectPointersInFunction(func: FunctionDeclaration): void {
+    // Check if return type is a pointer
+    if (func.returnType.includes("*")) {
+      this.hasPointers = true;
+      console.log(
+        `  Function ${func.name} returns pointer type: ${func.returnType}`,
+      );
+    }
+
+    // Check parameter types
+    for (const param of func.params) {
+      if (param.paramType.includes("*")) {
+        this.hasPointers = true;
+        this.pointerVariables.add(param.name);
+        console.log(
+          `  Parameter ${param.name} is pointer type: ${param.paramType}`,
+        );
+      }
+    }
+
+    this.detectPointersInStatement(func.body);
+  }
+
+  private detectPointersInStatement(stmt: Statement): void {
+    switch (stmt.type) {
+      case NodeType.VariableDeclaration:
+        const varDecl = stmt as VariableDeclaration;
+        if (varDecl.varType.includes("*")) {
+          this.hasPointers = true;
+          this.pointerVariables.add(varDecl.name);
+          console.log(
+            `  Variable ${varDecl.name} is pointer type: ${varDecl.varType}`,
+          );
+        }
+        this.detectPointersInExpression(varDecl.init);
+        break;
+
+      case NodeType.AssignmentStatement:
+        const assignment = stmt as AssignmentStatement;
+        if (typeof assignment.target !== "string") {
+          // This is a UnaryExpression (dereferenced pointer assignment)
+          this.hasPointers = true;
+          console.log(
+            `  Found dereferenced pointer assignment: *${(assignment.target as UnaryExpression).operand}`,
+          );
+        }
+        this.detectPointersInExpression(assignment.value);
+        break;
+
+      case NodeType.ExpressionStatement:
+        this.detectPointersInExpression(
+          (stmt as ExpressionStatement).expression,
+        );
+        break;
+
+      case NodeType.ReturnStatement:
+        this.detectPointersInExpression((stmt as ReturnStatement).argument);
+        break;
+
+      case NodeType.IfStatement:
+        const ifStmt = stmt as IfStatement;
+        this.detectPointersInExpression(ifStmt.condition);
+        this.detectPointersInStatement(ifStmt.thenBranch);
+        if (ifStmt.elseBranch) {
+          this.detectPointersInStatement(ifStmt.elseBranch);
+        }
+        break;
+
+      case NodeType.WhileStatement:
+        const whileStmt = stmt as WhileStatement;
+        this.detectPointersInExpression(whileStmt.condition);
+        this.detectPointersInStatement(whileStmt.body);
+        break;
+
+      case NodeType.BlockStatement:
+        const block = stmt as BlockStatement;
+        for (const s of block.statements) {
+          this.detectPointersInStatement(s);
+        }
+        break;
+    }
+  }
+
+  private detectPointersInExpression(expr: Expression): void {
+    switch (expr.type) {
+      case NodeType.UnaryExpression:
+        const unaryExpr = expr as UnaryExpression;
+        this.hasPointers = true;
+
+        if (unaryExpr.operator === "&") {
+          // Address-of operation
+          if (unaryExpr.operand.type === NodeType.Identifier) {
+            const varName = (unaryExpr.operand as Identifier).name;
+            this.pointerReferencedVariables.add(varName);
+            console.log(`  Address taken of variable: ${varName}`);
+          }
+        } else if (unaryExpr.operator === "*") {
+          // Dereference operation
+          console.log(`  Found pointer dereference operation`);
+        }
+
+        this.detectPointersInExpression(unaryExpr.operand);
+        break;
+
+      case NodeType.BinaryExpression:
+        const binExpr = expr as BinaryExpression;
+        this.detectPointersInExpression(binExpr.left);
+        this.detectPointersInExpression(binExpr.right);
+        break;
+
+      case NodeType.FunctionCall:
+        const funcCall = expr as FunctionCall;
+        for (const arg of funcCall.arguments) {
+          this.detectPointersInExpression(arg);
+        }
+        break;
+
+      // Identifier and NumberLiteral don't need special handling
+      default:
+        break;
+    }
+  }
+
+  // =================== POINTER-SAFE OPTIMIZATION CHECKS ===================
+
+  /**
+   * Determines if a variable can be safely optimized (not a pointer and address not taken)
+   */
+  private canOptimizeVariable(varName: string): boolean {
+    if (!this.hasPointers) return true;
+
+    const isPointer = this.pointerVariables.has(varName);
+    const hasAddressTaken = this.pointerReferencedVariables.has(varName);
+
+    if (isPointer || hasAddressTaken) {
+      console.log(
+        `  Skipping optimization of variable '${varName}' (${isPointer ? "is pointer" : "address taken"})`,
+      );
+      return false;
+    }
+
+    return true;
+  }
+
+  /**
+   * Determines if an expression contains any pointer operations
+   */
+  private containsPointerOperations(expr: Expression): boolean {
+    switch (expr.type) {
+      case NodeType.UnaryExpression:
+        const unaryExpr = expr as UnaryExpression;
+        return unaryExpr.operator === "&" || unaryExpr.operator === "*";
+
+      case NodeType.BinaryExpression:
+        const binExpr = expr as BinaryExpression;
+        return (
+          this.containsPointerOperations(binExpr.left) ||
+          this.containsPointerOperations(binExpr.right)
+        );
+
+      case NodeType.FunctionCall:
+        const funcCall = expr as FunctionCall;
+        return funcCall.arguments.some((arg) =>
+          this.containsPointerOperations(arg),
+        );
+
+      case NodeType.Identifier:
+        const id = expr as Identifier;
+        return this.pointerVariables.has(id.name);
+
+      default:
+        return false;
+    }
+  }
+
+  /**
+   * Determines if a statement involves pointers and should be excluded from optimization
+   */
+  private statementInvolvesPointers(stmt: Statement): boolean {
+    switch (stmt.type) {
+      case NodeType.VariableDeclaration:
+        const varDecl = stmt as VariableDeclaration;
+        return (
+          varDecl.varType.includes("*") ||
+          this.containsPointerOperations(varDecl.init)
+        );
+
+      case NodeType.AssignmentStatement:
+        const assignment = stmt as AssignmentStatement;
+        // Check if target is a dereferenced pointer
+        if (typeof assignment.target !== "string") {
+          return true;
+        }
+        // Check if target variable is a pointer or has address taken
+        if (!this.canOptimizeVariable(assignment.target)) {
+          return true;
+        }
+        return this.containsPointerOperations(assignment.value);
+
+      case NodeType.ExpressionStatement:
+        return this.containsPointerOperations(
+          (stmt as ExpressionStatement).expression,
+        );
+
+      case NodeType.ReturnStatement:
+        return this.containsPointerOperations(
+          (stmt as ReturnStatement).argument,
+        );
+
+      case NodeType.IfStatement:
+        const ifStmt = stmt as IfStatement;
+        return this.containsPointerOperations(ifStmt.condition);
+
+      case NodeType.WhileStatement:
+        const whileStmt = stmt as WhileStatement;
+        return this.containsPointerOperations(whileStmt.condition);
+
+      default:
+        return false;
+    }
+  }
+
+  // =================== MODIFIED OPTIMIZATION PHASES ===================
+
   // Helper method to find function calls within a function
   private findFunctionCalls(func: FunctionDeclaration): string[] {
     const calls: string[] = [];
@@ -244,6 +513,9 @@ export class IterativeOptimizer {
         const binExpr = expr as BinaryExpression;
         findCallsInExpression(binExpr.left);
         findCallsInExpression(binExpr.right);
+      } else if (expr.type === NodeType.UnaryExpression) {
+        const unaryExpr = expr as UnaryExpression;
+        findCallsInExpression(unaryExpr.operand);
       }
     };
 
@@ -327,12 +599,19 @@ export class IterativeOptimizer {
   }
 
   private dceStatement(stmt: Statement): Statement | null {
+    // POINTER SAFETY: Skip optimization if statement involves pointers
+    if (this.statementInvolvesPointers(stmt)) {
+      console.log(`  DCE: Skipping pointer-related statement`);
+      return stmt;
+    }
+
     switch (stmt.type) {
       case NodeType.VariableDeclaration:
         const varDecl = stmt as VariableDeclaration;
         if (
           !this.usedVariables.has(varDecl.name) &&
-          !this.hasSideEffects(varDecl.init)
+          !this.hasSideEffects(varDecl.init) &&
+          this.canOptimizeVariable(varDecl.name)
         ) {
           this.currentPassStats.deadCodeElimination++;
           this.phaseChanged = true;
@@ -344,8 +623,10 @@ export class IterativeOptimizer {
       case NodeType.AssignmentStatement:
         const assignment = stmt as AssignmentStatement;
         if (
-          !this.usedVariables.has(assignment.target as any) &&
-          !this.hasSideEffects(assignment.value)
+          typeof assignment.target === "string" &&
+          !this.usedVariables.has(assignment.target) &&
+          !this.hasSideEffects(assignment.value) &&
+          this.canOptimizeVariable(assignment.target)
         ) {
           this.currentPassStats.deadCodeElimination++;
           this.phaseChanged = true;
@@ -359,7 +640,10 @@ export class IterativeOptimizer {
       case NodeType.IfStatement:
         const ifStmt = stmt as IfStatement;
         const condition = ifStmt.condition;
-        if (condition.type === NodeType.NumberLiteral) {
+        if (
+          condition.type === NodeType.NumberLiteral &&
+          !this.containsPointerOperations(condition)
+        ) {
           const condValue = (condition as NumberLiteral).value;
           this.currentPassStats.deadCodeElimination++;
           this.phaseChanged = true;
@@ -444,17 +728,23 @@ export class IterativeOptimizer {
     };
   }
 
-  // Complete fix for the cpStatement method in your IterativeOptimizer class
-  // Replace the existing cpStatement method with this updated version
-
   private cpStatement(stmt: Statement): Statement {
+    // POINTER SAFETY: Skip optimization if statement involves pointers
+    if (this.statementInvolvesPointers(stmt)) {
+      console.log(`  CP: Skipping pointer-related statement`);
+      return stmt;
+    }
+
     switch (stmt.type) {
       case NodeType.VariableDeclaration: {
         const varDecl = stmt as VariableDeclaration;
         const init = this.cpExpression(varDecl.init);
 
-        // Track constant values
-        if (init.type === NodeType.NumberLiteral) {
+        // Track constant values only for non-pointer variables
+        if (
+          init.type === NodeType.NumberLiteral &&
+          this.canOptimizeVariable(varDecl.name)
+        ) {
           this.constantValues[varDecl.name] = (init as NumberLiteral).value;
         }
 
@@ -467,13 +757,18 @@ export class IterativeOptimizer {
         const assignment = stmt as AssignmentStatement;
         const value = this.cpExpression(assignment.value);
 
-        // Track constant values
-        if (value.type === NodeType.NumberLiteral) {
-          this.constantValues[assignment.target as any] = (
-            value as NumberLiteral
-          ).value;
-        } else {
-          delete this.constantValues[assignment.target as any];
+        // Track constant values only for non-pointer variables
+        if (
+          typeof assignment.target === "string" &&
+          this.canOptimizeVariable(assignment.target)
+        ) {
+          if (value.type === NodeType.NumberLiteral) {
+            this.constantValues[assignment.target] = (
+              value as NumberLiteral
+            ).value;
+          } else {
+            delete this.constantValues[assignment.target];
+          }
         }
 
         return {
@@ -589,12 +884,13 @@ export class IterativeOptimizer {
         const condition = this.cpExpression(whileStmt.condition);
 
         // For processing the body, remove ALL loop-modified variables from constants
-        // This prevents folding expressions like "count - 1" to "9"
+        // that we can optimize
         for (const modVar of modifiedVars) {
-          delete this.constantValues[modVar];
+          if (this.canOptimizeVariable(modVar)) {
+            delete this.constantValues[modVar];
+          }
         }
 
-        // Process the body
         const body = this.cpStatement(whileStmt.body);
 
         return {
@@ -626,12 +922,19 @@ export class IterativeOptimizer {
   }
 
   private cpExpression(expr: Expression): Expression {
+    // POINTER SAFETY: Skip optimization if expression contains pointer operations
+    if (this.containsPointerOperations(expr)) {
+      console.log(`  CP: Skipping pointer-related expression`);
+      return expr;
+    }
+
     switch (expr.type) {
       case NodeType.Identifier:
         const id = expr as Identifier;
         if (
           this.constantValues.hasOwnProperty(id.name) &&
-          this.constantValues[id.name] !== undefined
+          this.constantValues[id.name] !== undefined &&
+          this.canOptimizeVariable(id.name)
         ) {
           this.currentPassStats.constantPropagation++;
           this.phaseChanged = true;
@@ -694,6 +997,12 @@ export class IterativeOptimizer {
   }
 
   private cfStatement(stmt: Statement): Statement {
+    // POINTER SAFETY: Skip optimization if statement involves pointers
+    if (this.statementInvolvesPointers(stmt)) {
+      console.log(`  CF: Skipping pointer-related statement`);
+      return stmt;
+    }
+
     switch (stmt.type) {
       case NodeType.VariableDeclaration:
         const varDecl = stmt as VariableDeclaration;
@@ -729,17 +1038,22 @@ export class IterativeOptimizer {
         const modifiedVars = this.getModifiedVariables(whileStmt.body);
 
         // Remove loop-modified variables from being treated as constants
-        // in BOTH condition and body processing
+        // only for variables we can optimize
         const savedConstants: { [key: string]: number | undefined } = {};
         for (const modVar of modifiedVars) {
-          savedConstants[modVar] = this.constantValues[modVar];
-          delete this.constantValues[modVar];
+          if (this.canOptimizeVariable(modVar)) {
+            savedConstants[modVar] = this.constantValues[modVar];
+            delete this.constantValues[modVar];
+          }
         }
 
         const whileCondition = this.cfExpression(whileStmt.condition);
 
         // Check for constant false condition
-        if (whileCondition.type === NodeType.NumberLiteral) {
+        if (
+          whileCondition.type === NodeType.NumberLiteral &&
+          !this.containsPointerOperations(whileCondition)
+        ) {
           const condValue = (whileCondition as NumberLiteral).value;
           if (condValue === 0) {
             this.currentPassStats.deadCodeElimination++;
@@ -778,6 +1092,12 @@ export class IterativeOptimizer {
   }
 
   private cfExpression(expr: Expression): Expression {
+    // POINTER SAFETY: Skip optimization if expression contains pointer operations
+    if (this.containsPointerOperations(expr)) {
+      console.log(`  CF: Skipping pointer-related expression`);
+      return expr;
+    }
+
     switch (expr.type) {
       case NodeType.BinaryExpression:
         const binExpr = expr as BinaryExpression;
@@ -1008,6 +1328,10 @@ export class IterativeOptimizer {
         this.collectUsedVariablesInExpression(binExpr.left);
         this.collectUsedVariablesInExpression(binExpr.right);
         break;
+      case NodeType.UnaryExpression:
+        const unaryExpr = expr as UnaryExpression;
+        this.collectUsedVariablesInExpression(unaryExpr.operand);
+        break;
       case NodeType.FunctionCall:
         const funcCall = expr as FunctionCall;
         if (this.functionPass) {
@@ -1032,12 +1356,14 @@ export class IterativeOptimizer {
           this.hasSideEffects(binExpr.left) ||
           this.hasSideEffects(binExpr.right)
         );
+      case NodeType.UnaryExpression:
+        const unaryExpr = expr as UnaryExpression;
+        return this.hasSideEffects(unaryExpr.operand);
       default:
         return false;
     }
   }
 
-  // Add this helper method to your IterativeOptimizer class
   private getModifiedVariables(stmt: Statement): Set<string> {
     const modified = new Set<string>();
 
@@ -1047,7 +1373,9 @@ export class IterativeOptimizer {
       switch (node.type) {
         case NodeType.AssignmentStatement:
           const assignment = node as AssignmentStatement;
-          modified.add(assignment.target as any);
+          if (typeof assignment.target === "string") {
+            modified.add(assignment.target);
+          }
           traverse(assignment.value);
           break;
 
@@ -1091,12 +1419,16 @@ export class IterativeOptimizer {
           traverse(binExpr.right);
           break;
 
+        case NodeType.UnaryExpression:
+          const unaryExpr = node as UnaryExpression;
+          traverse(unaryExpr.operand);
+          break;
+
         case NodeType.FunctionCall:
           const funcCall = node as FunctionCall;
           funcCall.arguments.forEach(traverse);
           break;
 
-        // Other expression types don't modify variables
         default:
           break;
       }
@@ -1124,12 +1456,16 @@ export class IterativeOptimizer {
           traverse(binExpr.right);
           break;
 
+        case NodeType.UnaryExpression:
+          const unaryExpr = node as UnaryExpression;
+          traverse(unaryExpr.operand);
+          break;
+
         case NodeType.FunctionCall:
           const funcCall = node as FunctionCall;
           funcCall.arguments.forEach(traverse);
           break;
 
-        // NumberLiteral doesn't contain variables
         default:
           break;
       }
