@@ -491,10 +491,41 @@ export class IterativeOptimizer {
 
       case NodeType.WhileStatement:
         const whileStmt = stmt as WhileStatement;
+
+        // First, get all variables that are modified in the loop body
+        const modifiedVars = this.getModifiedVariables(whileStmt.body);
+
+        // Get variables used in the condition
+        const conditionVars = this.getVariablesInExpression(
+          whileStmt.condition,
+        );
+
+        // If any variable in the condition is modified in the loop body,
+        // we cannot treat it as constant for the condition evaluation
+        const savedConstants: { [key: string]: number | undefined } = {};
+        for (const condVar of conditionVars) {
+          if (modifiedVars.has(condVar)) {
+            savedConstants[condVar] = this.constantValues[condVar];
+            delete this.constantValues[condVar];
+          }
+        }
+
+        // Now process the condition without treating loop-modified variables as constants
+        const condition = this.cpExpression(whileStmt.condition);
+
+        // For processing the body, remove ALL loop-modified variables from constants
+        // This prevents folding expressions like "count - 1" to "9"
+        for (const modVar of modifiedVars) {
+          delete this.constantValues[modVar];
+        }
+
+        // Process the body
+        const body = this.cpStatement(whileStmt.body);
+
         return {
           ...whileStmt,
-          condition: this.cpExpression(whileStmt.condition),
-          body: this.cpStatement(whileStmt.body),
+          condition,
+          body,
         };
 
       case NodeType.ReturnStatement:
@@ -618,6 +649,18 @@ export class IterativeOptimizer {
 
       case NodeType.WhileStatement:
         const whileStmt = stmt as WhileStatement;
+
+        // Get all variables modified in the loop body
+        const modifiedVars = this.getModifiedVariables(whileStmt.body);
+
+        // Remove loop-modified variables from being treated as constants
+        // in BOTH condition and body processing
+        const savedConstants: { [key: string]: number | undefined } = {};
+        for (const modVar of modifiedVars) {
+          savedConstants[modVar] = this.constantValues[modVar];
+          delete this.constantValues[modVar];
+        }
+
         const whileCondition = this.cfExpression(whileStmt.condition);
 
         // Check for constant false condition
@@ -917,6 +960,108 @@ export class IterativeOptimizer {
       default:
         return false;
     }
+  }
+
+  // Add this helper method to your IterativeOptimizer class
+  private getModifiedVariables(stmt: Statement): Set<string> {
+    const modified = new Set<string>();
+
+    const traverse = (node: Statement | Expression): void => {
+      if (!node) return;
+
+      switch (node.type) {
+        case NodeType.AssignmentStatement:
+          const assignment = node as AssignmentStatement;
+          modified.add(assignment.target);
+          traverse(assignment.value);
+          break;
+
+        case NodeType.VariableDeclaration:
+          const varDecl = node as VariableDeclaration;
+          modified.add(varDecl.name);
+          traverse(varDecl.init);
+          break;
+
+        case NodeType.BlockStatement:
+          const block = node as BlockStatement;
+          block.statements.forEach(traverse);
+          break;
+
+        case NodeType.IfStatement:
+          const ifStmt = node as IfStatement;
+          traverse(ifStmt.condition);
+          traverse(ifStmt.thenBranch);
+          if (ifStmt.elseBranch) traverse(ifStmt.elseBranch);
+          break;
+
+        case NodeType.WhileStatement:
+          const whileStmt = node as WhileStatement;
+          traverse(whileStmt.condition);
+          traverse(whileStmt.body);
+          break;
+
+        case NodeType.ExpressionStatement:
+          const exprStmt = node as ExpressionStatement;
+          traverse(exprStmt.expression);
+          break;
+
+        case NodeType.ReturnStatement:
+          const returnStmt = node as ReturnStatement;
+          traverse(returnStmt.argument);
+          break;
+
+        case NodeType.BinaryExpression:
+          const binExpr = node as BinaryExpression;
+          traverse(binExpr.left);
+          traverse(binExpr.right);
+          break;
+
+        case NodeType.FunctionCall:
+          const funcCall = node as FunctionCall;
+          funcCall.arguments.forEach(traverse);
+          break;
+
+        // Other expression types don't modify variables
+        default:
+          break;
+      }
+    };
+
+    traverse(stmt);
+    return modified;
+  }
+
+  private getVariablesInExpression(expr: Expression): Set<string> {
+    const variables = new Set<string>();
+
+    const traverse = (node: Expression): void => {
+      if (!node) return;
+
+      switch (node.type) {
+        case NodeType.Identifier:
+          const id = node as Identifier;
+          variables.add(id.name);
+          break;
+
+        case NodeType.BinaryExpression:
+          const binExpr = node as BinaryExpression;
+          traverse(binExpr.left);
+          traverse(binExpr.right);
+          break;
+
+        case NodeType.FunctionCall:
+          const funcCall = node as FunctionCall;
+          funcCall.arguments.forEach(traverse);
+          break;
+
+        // NumberLiteral doesn't contain variables
+        default:
+          break;
+      }
+    };
+
+    traverse(expr);
+    return variables;
   }
 
   private deepClone<T>(obj: T): T {

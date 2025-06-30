@@ -7,10 +7,35 @@ _main:						 ; @main
 	sub	sp, sp, #48
 	stp	x29, x30, [sp, #32]			 ; 16-byte Folded Spill
 	add	x29, sp, #32
-	mov	w0, #0				; =0x0
-	mov	x16, #1
-	svc	#0x80
+	mov	w0, #3				; =0x3
+	mov	w8, w0
 	mov	w0, #2				; =0x2
+	mov	w9, w0
+	add	w0, w8, w9
+	mov	w9, w0
+	mov	w0, #1				; =0x1
+	mov	w8, w0
+	mov	w0, #0				; =0x0
+	mov	w10, w0
+	add	w0, w8, w10
+	mov	w10, w0
+	mul	w0, w9, w10
+	stur	w0, [x29, #-4]
+	ldur	w0, [x29, #-4]
+	mov	w10, w0
+	mov	w0, #1				; =0x1
+	mov	w9, w0
+	sdiv	w0, w10, w9
+	mov	w9, w0
+	mov	w0, #0				; =0x0
+	mov	w10, w0
+	mov	w0, #999				; =0x3e7
+	mov	w8, w0
+	mul	w0, w10, w8
+	mov	w8, w0
+	add	w0, w9, w8
+	stur	w0, [x29, #-8]
+	ldur	w0, [x29, #-8]
 mov x9, sp
 mov x8, x0
 str x8, [x9]

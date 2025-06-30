@@ -2,6 +2,14 @@ export type CodeSample = { code: string; output: number };
 export const code_samples: CodeSample[] = [
   // Test 9: Constant condition folding
   //  NOT WORKING as result is being replaced wit
+  // Test 7: Complex expression optimization
+  //  NOT WORKING
+  // NOT WORKING
+  // Test 12: Multiple optimization opportunities
+  //  NOT WORKING
+];
+
+export const working = [
   {
     code: `int main() {
     int result = 5;
@@ -15,8 +23,18 @@ export const code_samples: CodeSample[] = [
   }`,
     output: 100,
   },
-  // Test 7: Complex expression optimization
-  //  NOT WORKING
+  {
+    code: `int main() {
+    int count = 10;
+    int limit = 0;
+    while (count > limit) {
+      count = count - 1;
+    }
+    printf(0);
+    return 0;
+  }`,
+    output: 0, // Last printf outputs 3 (after count becomes 3, loop exits)
+  },
   {
     code: `int main() {
     int a = (3 + 2) * (1 + 0);
@@ -27,40 +45,21 @@ export const code_samples: CodeSample[] = [
     output: 5, // a = 5 * 1 = 5, b = 5 / 1 + 0 = 5
   },
   // Test 5: While loops with assignment statements
-
-  // NOT WORKING
-  {
-    code: `int main() {
-    int count = 0;
-    int limit = 10;
-    while (count < limit) {
-      count = count + 1;
-    }
-    printf(0);
-    return 0;
-  }`,
-    output: 0, // Last printf outputs 3 (after count becomes 3, loop exits)
-  },
-  // Test 12: Multiple optimization opportunities
-  //  NOT WORKING
-];
-
-export const working = [
   // code_samples[0],
   //
   // Test exit
   {
     code: `int main() {
-    int a = 2 + 3;
-    int b = a * 1;
-    int c = b + 0;
-    int d = c / 1;
-    int e = d - 0;
-    if (e > 0) {
-      printf(1 * e + 0 * 999);
-    }
-    return 0;
-  }`,
+  int a = 2 + 3;
+  int b = a * 1;
+  int c = b + 0;
+  int d = c / 1;
+  int e = d - 0;
+  if (e > 0) {
+    printf(1 * e + 0 * 999);
+  }
+  return 0;
+}`,
     output: 5, // All operations simplify to 5
   },
   {

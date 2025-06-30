@@ -7,10 +7,7 @@ _main:						 ; @main
 	sub	sp, sp, #48
 	stp	x29, x30, [sp, #32]			 ; 16-byte Folded Spill
 	add	x29, sp, #32
-	mov	w0, #0				; =0x0
-	mov	x16, #1
-	svc	#0x80
-	mov	w0, #2				; =0x2
+	mov	w0, #5				; =0x5
 mov x9, sp
 mov x8, x0
 str x8, [x9]
