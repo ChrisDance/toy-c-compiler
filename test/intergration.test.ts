@@ -1,6 +1,7 @@
 import { execSync } from "child_process";
 import * as fs from "fs";
 import * as path from "path";
+import { code_samples } from "../src/code_samples";
 import { ARM64CodeGenerator } from "../src/codegen";
 import { Lexer } from "../src/Lexer";
 import { IterativeOptimizer } from "../src/optimiser";
@@ -29,6 +30,7 @@ describe("ARM64 Compiler Integration Tests", () => {
   function compileToAssembly(
     sourceCode: string,
     outputFileName: string,
+    optimised: boolean,
   ): string {
     const outputPath = path.join(testOutputDir, outputFileName);
 
@@ -36,9 +38,10 @@ describe("ARM64 Compiler Integration Tests", () => {
     const tokens = lexer.scanTokens();
     const parser = new Parser(tokens);
     let program = parser.parse();
-
+    if (optimised) {
+      program = new IterativeOptimizer().optimize(program).optimized;
+    }
     const codeGen = new ARM64CodeGenerator();
-    program = new IterativeOptimizer().optimize(program).optimized;
     const assembly = codeGen.generate(program);
 
     fs.writeFileSync(outputPath, assembly);
@@ -48,8 +51,13 @@ describe("ARM64 Compiler Integration Tests", () => {
   async function compileAndRun(
     sourceCode: string,
     testName: string,
+    optimised: boolean,
   ): Promise<string> {
-    const assemblyPath = compileToAssembly(sourceCode, `${testName}.s`);
+    const assemblyPath = compileToAssembly(
+      sourceCode,
+      `${testName}.s`,
+      optimised,
+    );
     const objectPath = path.join(testOutputDir, `${testName}.o`);
     const executablePath = path.join(testOutputDir, testName);
 
@@ -93,49 +101,23 @@ describe("ARM64 Compiler Integration Tests", () => {
   runIfARM64(
     "should compile and execute a comprehensive program with all language features",
     async () => {
-      const sourceCode = `
-      int Square(int arg)
-      {
-          return arg * arg;
-      }
-      int main()
-      {
-          int i = 5;
-          int k = 4;
-          int j = k + i;
-          if(i > j)
-          {
-            printf(Square(Square(2)));
-          }
-          else
-          {
-              printf(5);
-          }
-          return 0;
-      }
-    `;
+      let i = 1;
+      for (const sample of code_samples) {
+        const output = await compileAndRun(
+          sample.code,
+          "sample test: " + i,
+          false,
+        );
+        const outputOptimised = await compileAndRun(
+          sample.code,
+          "sample test optimised: " + i,
+          true,
+        );
+        expect(output).toBe(sample.output.toString());
+        expect(outputOptimised).toBe(sample.output.toString());
 
-      const sourceCode2 = `
-      int countdown() {
-
-
-      int i = 10;
-      while (i > 3) {
-          i = i - 1;
+        i++;
       }
-          return i;
-      }
-
-      int main() {
-          printf(countdown());
-          return  0;
-      }
-      `;
-
-      const output1 = await compileAndRun(sourceCode, "integration_test1");
-      expect(output1).toBe("5");
-      const output2 = await compileAndRun(sourceCode2, "integration_test2");
-      expect(output2).toBe("3");
     },
   );
 });

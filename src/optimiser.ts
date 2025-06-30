@@ -92,7 +92,7 @@ export class IterativeOptimizer {
     this.resetStats();
 
     let currentProgram = this.deepClone(program);
-    program = currentProgram;
+    this._program = currentProgram;
     let passChanged = true;
 
     while (passChanged && this.stats.passes < maxPasses) {

@@ -21,6 +21,7 @@ export class ARM64CodeGenerator {
   > = new Map();
   private stringLiterals: Map<string, string> = new Map();
   private labelCounter: number = 0;
+  private stringLiteralCounter: number = 0;
 
   private nextOffsetMap: Map<string, number> = new Map();
 
@@ -52,6 +53,7 @@ export class ARM64CodeGenerator {
     this.varLocationMap.clear();
     this.stringLiterals.clear();
     this.labelCounter = 0;
+    this.stringLiteralCounter = 0;
     this.nextOffsetMap.clear();
 
     this.addLine("\t.section\t__TEXT,__text,regular,pure_instructions");
@@ -105,7 +107,7 @@ export class ARM64CodeGenerator {
     this.varLocationMap.set(func.name, new Map());
 
     const isMain = func.name === "main";
-    this.nextOffsetMap.set(func.name, isMain ? -4 : 8);
+    this.nextOffsetMap.set(func.name, isMain ? -4 : 16);
 
     this.addLine("");
     this.addLine(
@@ -126,8 +128,17 @@ export class ARM64CodeGenerator {
       this.addLine("\tldp\tx29, x30, [sp, #32]\t\t\t ; 16-byte Folded Reload");
       this.addLine("\tadd\tsp, sp, #48");
     } else {
-      this.addLine("\tsub\tsp, sp, #32");
+      // Calculate stack size needed (must be 16-byte aligned)
+      const baseStackSize = 32; // For x29, x30 storage
+      const maxVarSpace = 64; // Additional space for local variables
+      const totalStackSize = baseStackSize + maxVarSpace;
 
+      // Non-main function prologue
+      this.addLine(`\tsub\tsp, sp, #${totalStackSize}`);
+      this.addLine(`\tstp\tx29, x30, [sp, #${totalStackSize - 16}]`);
+      this.addLine(`\tadd\tx29, sp, #${totalStackSize - 16}`);
+
+      // Store parameters on stack
       for (let i = 0; i < func.params.length; i++) {
         const param = func.params[i];
         const offset = this.allocateStackSlot(func.name, false);
@@ -138,8 +149,9 @@ export class ARM64CodeGenerator {
 
       this.generateBlock(func.body);
 
-      /*regular function epilogue*/
-      this.addLine("\tadd\tsp, sp, #32");
+      // Non-main function epilogue
+      this.addLine(`\tldp\tx29, x30, [sp, #${totalStackSize - 16}]`);
+      this.addLine(`\tadd\tsp, sp, #${totalStackSize}`);
     }
 
     this.addLine("\tret");
@@ -205,7 +217,7 @@ export class ARM64CodeGenerator {
         const exprCode = this.generateExpression(stmt.expression);
         this.addLines(exprCode);
         break;
-      case "AssignmentStatement": // Use the enum value
+      case "AssignmentStatement":
         this.generateAssignmentStatement(stmt);
         break;
       case "IfStatement":
@@ -293,7 +305,6 @@ export class ARM64CodeGenerator {
   }
 
   private generateExpression(expr: Expression): string[] {
-    console.log("gen expree", expr);
     switch (expr.type) {
       case "BinaryExpression":
         return this.generateBinaryExpression(expr);
@@ -356,19 +367,26 @@ export class ARM64CodeGenerator {
   }
 
   private generateFunctionCall(expr: FunctionCall): string[] {
-    console.log("gen function call", expr);
     if (expr.callee in this.specialFunctions) {
       return this.specialFunctions[expr.callee](expr.arguments);
     }
 
     const result: string[] = [];
 
+    // Generate code for all arguments and place them in correct registers
     for (let i = 0; i < expr.arguments.length; i++) {
       const argCode = this.generateExpression(expr.arguments[i]);
       result.push(...argCode);
 
-      if (i > 0) {
-        result.push(`\tmov\tw${i}, w0`);
+      // ARM64 calling convention: first 8 arguments go in w0-w7
+      if (i < 8) {
+        if (i > 0) {
+          result.push(`\tmov\tw${i}, w0`);
+        }
+        // First argument stays in w0
+      } else {
+        // Additional arguments would go on stack (not implemented for this toy compiler)
+        throw new Error("More than 8 function arguments not supported");
       }
     }
 
@@ -443,7 +461,8 @@ export class ARM64CodeGenerator {
   }
 
   private addStringLiteral(value: string): string {
-    const label = "l_.str";
+    // Generate unique label for each string literal
+    const label = `l_.str.${this.stringLiteralCounter++}`;
     this.stringLiterals.set(label, value);
     return label;
   }
