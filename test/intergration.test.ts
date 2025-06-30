@@ -103,14 +103,18 @@ describe("ARM64 Compiler Integration Tests", () => {
     async () => {
       let i = 1;
       for (const sample of code_samples) {
+        // Sanitize the test name to avoid spaces and special characters in filenames
+        const sanitizedTestName = `sample_test_${i}`;
+        const sanitizedOptimizedTestName = `sample_test_optimized_${i}`;
+
         const output = await compileAndRun(
           sample.code,
-          "sample test: " + i,
+          sanitizedTestName,
           false,
         );
         const outputOptimised = await compileAndRun(
           sample.code,
-          "sample test optimised: " + i,
+          sanitizedOptimizedTestName,
           true,
         );
         expect(output).toBe(sample.output.toString());

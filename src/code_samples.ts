@@ -1,12 +1,71 @@
 export type CodeSample = { code: string; output: number };
-
 export const code_samples: CodeSample[] = [
+  // Test 9: Constant condition folding
+  //  NOT WORKING
+  {
+    code: `int main() {
+    int result = 0;
+    if (1 == 1) {
+      result = 100;
+    } else {
+      result = 200;
+    }
+    printf(result);
+    return 0;
+  }`,
+    output: 100,
+  },
+  // Test 7: Complex expression optimization
+  //  NOT WORKING
+  {
+    code: `int main() {
+    int a = (3 + 2) * (1 + 0);
+    int b = a / 1 + 0 * 999;
+    printf(b);
+    return 0;
+  }`,
+    output: 5, // a = 5 * 1 = 5, b = 5 / 1 + 0 = 5
+  },
+  // Test 5: While loops with assignment statements
+
+  // NOT WORKING
+  {
+    code: `int main() {
+    int count = 0;
+    int limit = 10;
+    while (count < limit) {
+      count = count + 1;
+    }
+    printf(0);
+    return 0;
+  }`,
+    output: 0, // Last printf outputs 3 (after count becomes 3, loop exits)
+  },
+  // Test 12: Multiple optimization opportunities
+  //  NOT WORKING
+  {
+    code: `int main() {
+    int a = 2 + 3;
+    int b = a * 1;
+    int c = b + 0;
+    int d = c / 1;
+    int e = d - 0;
+    if (e > 0) {
+      printf(1 * e + 0 * 999);
+    }
+    return 0;
+  }`,
+    output: 5, // All operations simplify to 5
+  },
+];
+
+export const working = [
   // Test 1: Function calls with nested expressions and control flow
+  //
   {
     code: `int Square(int arg) {
     return arg * arg;
   }
-
   int main() {
     int i = 5;
     int k = 4;
@@ -20,177 +79,150 @@ export const code_samples: CodeSample[] = [
   }`,
     output: 5,
   },
+  //Test 2: While loops (FIXED - added parameter)
+  {
+    code: `
+    int testWhile(int k) {
+    while (k > 3) {
+      k = k - 1;
+    }
+    return k;
+  }
+  int main() {
+    printf(testWhile(5));
+    return 0;
+  }`,
+    output: 3,
+  },
+  // Test 3: Algebraic simplification and dead function elimination
+  {
+    code: `int redundant() {
+    return 5;
+  }
+  int main() {
+    int w = 1 * 5;
+    int x = w;
+    int y = x - 0;
+    int z = y / 1;
+    if (z == 5) {
+      printf(z * 1 + 0);
+    }
+    return 0;
+  }`,
+    output: 5,
+  },
+  //Test 4: Constant propagation through control flow (FIXED - added printf)
+  {
+    code: `int main() {
+    int x = 3;
+    int y = x + 7;
+    int z = 2 * y;
+    if (x > y) {
+      z = x / 2 + y / 3;
+    } else {
+      z = x * y + y;
+    }
+    printf(z);
+    return 0;
+  }`,
+    output: 40, // x=3, y=10, z initially 20, but since x<y, z becomes 3*10+10 = 40
+  },
+
+  // Test 6: Unreachable code elimination
+  {
+    code: `int main() {
+    if (5 > 10) {
+      printf(999);
+    }
+    if (0 == 0) {
+      printf(42);
+    }
+    return 0;
+  }`,
+    output: 42,
+  },
+
+  // Test 8: Assignment statements with optimization
+  {
+    code: `int main() {
+    int x = 10;
+    x = x + 5;
+    x = 0 + x;
+    printf(x);
+    return 0;
+  }`,
+    output: 15,
+  },
+
+  // Test 10: Dead variable elimination
+  {
+    code: `int main() {
+    int unused1 = 42;
+    int unused2 = unused1 * 2;
+    int used = 10;
+    printf(used);
+    return 0;
+  }`,
+    output: 10,
+  },
+  // Test 11: Nested function calls with optimization
+  {
+    code: `int Double(int x) {
+    return x * 2;
+  }
+  int Add(int a) {
+    return a + 0;
+  }
+  int main() {
+    int value = 5;
+    int result = Double(Add(value));
+    printf(result);
+    return 0;
+  }`,
+    output: 10, // Add(5) = 5, Double(5) = 10
+  },
+  // Test 13: Loop with constant condition (should be eliminated)
+  {
+    code: `int main() {
+    int sum = 0;
+    while (0 > 1) {
+      sum = sum + 1;
+      printf(sum);
+    }
+    printf(sum);
+    return 0;
+  }`,
+    output: 0, // Loop never executes, sum remains 0
+  },
+  // Test 14: Comparison operators testing
+  {
+    code: `int main() {
+    int x = 10;
+    int y = 5;
+    if (x > y) {
+      printf(1);
+    }
+    if (x < y) {
+      printf(2);
+    }
+    if (x == y) {
+      printf(3);
+    }
+    return 0;
+  }`,
+    output: 1, // Only first condition is true (10 > 5)
+  },
+  // // Test 15: Function with optimization potential
+  {
+    code: `int Calculate(int input) {
+    int temp = input + 0;
+    int result = temp * 1;
+    return result / 1;
+  }
+  int main() {
+    printf(Calculate(42));
+    return 0;
+  }`,
+    output: 42, // All operations are identity operations, returns input
+  },
 ];
-
-// ,
-//   // Test 2: While loops (FIXED - added parameter)
-//   `int testWhile(int k) {
-//     while (k > 0) {
-//       k = k - 1;
-//     }
-//   }
-
-//   int main() {
-//     testWhile(5);
-//     printf(10);
-//     return 0;
-//   }`,
-
-//   // Test 3: Algebraic simplification and dead function elimination
-//   `int redundant() {
-//     return 5;
-//   }
-
-//   int main() {
-//     int w = 1 * (2 + 3);
-//     int x = w + (0 * 999);
-//     int y = x - 0;
-//     int z = y / 1;
-//     if (z == 5) {
-//       printf(z * 1 + 0);
-//     }
-//     return 0;
-//   }`,
-
-//   // Test 4: Constant propagation through control flow (FIXED - added printf)
-//   `int main() {
-//     int x = 3;
-//     int y = x + 7;
-//     int z = 2 * y;
-//     if (x > y) {
-//       z = x / 2 + y / 3;
-//     } else {
-//       z = x * y + y;
-//     }
-//     printf(z);
-//     return 0;
-//   }`,
-
-//   // Test 5: While loops with assignment statements
-//   `int main() {
-//     int count = 0;
-//     int limit = 3;
-//     while (count < limit) {
-//       count = count + 1;
-//       printf(count);
-//     }
-//     return 0;
-//   }`,
-
-//   // Test 6: Unreachable code elimination
-//   `int main() {
-//     if (5 > 10) {
-//       printf(999);
-//     }
-//     if (0 == 0) {
-//       printf(42);
-//     }
-//     return 0;
-//   }`,
-
-//   // Test 7: Complex expression optimization
-//   `int main() {
-//     int a = (3 + 2) * (1 + 0);
-//     int b = a / 1 + 0 * 999;
-//     printf(b);
-//     return 0;
-//   }`,
-
-//   // Test 8: Assignment statements with optimization
-//   `int main() {
-//     int x = 10;
-//     x = x + 5;
-//     x = 0 + x;
-//     printf(x);
-//     return 0;
-//   }`,
-
-//   // Test 9: Constant condition folding
-//   `int main() {
-//     int result = 0;
-//     if (1 == 1) {
-//       result = 100;
-//     } else {
-//       result = 200;
-//     }
-//     printf(result);
-//     return 0;
-//   }`,
-
-//   // Test 10: Dead variable elimination
-//   `int main() {
-//     int unused1 = 42;
-//     int unused2 = unused1 * 2;
-//     int used = 10;
-//     printf(used);
-//     return 0;
-//   }`,
-
-//   // Test 11: Nested function calls with optimization
-//   `int Double(int x) {
-//     return x * 2;
-//   }
-
-//   int Add(int a) {
-//     return a + 0;
-//   }
-
-//   int main() {
-//     int value = 5;
-//     int result = Double(Add(value));
-//     printf(result);
-//     return 0;
-//   }`,
-
-//   // Test 12: Multiple optimization opportunities
-//   `int main() {
-//     int a = 2 + 3;
-//     int b = a * 1;
-//     int c = b + 0;
-//     int d = c / 1;
-//     int e = d - 0;
-//     if (e > 0) {
-//       printf(1 * e + 0 * 999);
-//     }
-//     return 0;
-//   }`,
-
-//   // Test 13: Loop with constant condition (should be eliminated)
-//   `int main() {
-//     int sum = 0;
-//     while (0 > 1) {
-//       sum = sum + 1;
-//       printf(sum);
-//     }
-//     printf(sum);
-//     return 0;
-//   }`,
-
-//   // Test 14: Comparison operators testing
-//   `int main() {
-//     int x = 10;
-//     int y = 5;
-//     if (x > y) {
-//       printf(1);
-//     }
-//     if (x < y) {
-//       printf(2);
-//     }
-//     if (x == y) {
-//       printf(3);
-//     }
-//     return 0;
-//   }`,
-
-//   // Test 15: Function with optimization potential
-//   `int Calculate(int input) {
-//     int temp = input + 0;
-//     int result = temp * 1;
-//     return result / 1;
-//   }
-
-//   int main() {
-//     printf(Calculate(42));
-//     return 0;
-//   }`,
-// ];

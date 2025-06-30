@@ -164,38 +164,129 @@ export class IterativeOptimizer {
       this.stats.constantPropagation +
       this.stats.deadCodeElimination +
       this.stats.algebraicSimplification;
-
     console.log(`\nOptimization completed after ${this.stats.passes} passes`);
-    this.functionPass = true;
+
+    // Phase 4: Dead Function Elimination
+    console.log("\n=== Dead Function Elimination ===");
+
     if (currentProgram.functions.length === 0) {
       throw new Error("Program needs at least one function");
     }
 
-    const b4NumFunctions = currentProgram.functions.length;
-    let main = currentProgram.functions.find((f) => (f.name = "main"))!;
-    if (!main) {
+    // Find and validate main function exists
+    const mainFunction = currentProgram.functions.find(
+      (f) => f.name === "main",
+    );
+    if (!mainFunction) {
       throw new Error("Program needs a main function");
     }
-    const f = currentProgram.functions.indexOf(main);
-    main = currentProgram.functions.splice(f, 1)[0];
-    console.log(main);
 
-    const calledFunctions: Set<string> = new Set();
-    this.functionQueue.push(main);
-    do {
-      const front = this.functionQueue.shift();
-      calledFunctions.add(front?.name!);
-      this.cpFunction(front!);
-    } while (this.functionQueue.length);
-    console.log("set", Array.from(calledFunctions));
-    console.log("sdsada", currentProgram.functions);
+    // Track function usage starting from main
+    const calledFunctions = new Set<string>();
+    const functionQueue: FunctionDeclaration[] = [mainFunction];
 
-    this.stats.functionsRemoved = b4NumFunctions - calledFunctions.size;
+    // Process function call graph using BFS
+    while (functionQueue.length > 0) {
+      const currentFunction = functionQueue.shift()!;
+
+      // Skip if already processed
+      if (calledFunctions.has(currentFunction.name)) {
+        continue;
+      }
+
+      calledFunctions.add(currentFunction.name);
+      console.log(`Processing function: ${currentFunction.name}`);
+
+      // Apply optimizations to this function
+      this.functionPass = true;
+      this.cpFunction(currentFunction);
+      this.cfFunction(currentFunction);
+      this.dceFunction(currentFunction);
+
+      // Find any function calls in this function and add to queue
+      this.findFunctionCalls(currentFunction).forEach((funcName) => {
+        const calledFunc = currentProgram.functions.find(
+          (f) => f.name === funcName,
+        );
+        if (calledFunc && !calledFunctions.has(funcName)) {
+          functionQueue.push(calledFunc);
+        }
+      });
+    }
+
+    // Calculate and apply function removal
+    const originalFunctionCount = currentProgram.functions.length;
+    const removedFunctions = currentProgram.functions
+      .filter((f) => !calledFunctions.has(f.name))
+      .map((f) => f.name);
+
+    if (removedFunctions.length > 0) {
+      console.log(`Removing unused functions: ${removedFunctions.join(", ")}`);
+    }
 
     currentProgram.functions = currentProgram.functions.filter((f) =>
       calledFunctions.has(f.name),
     );
+
+    this.stats.functionsRemoved = originalFunctionCount - calledFunctions.size;
+
+    console.log(`Functions kept: ${Array.from(calledFunctions).join(", ")}`);
+    console.log(`Functions removed: ${this.stats.functionsRemoved}`);
+
     return { optimized: currentProgram, stats: { ...this.stats } };
+  }
+
+  // Helper method to find function calls within a function
+  private findFunctionCalls(func: FunctionDeclaration): string[] {
+    const calls: string[] = [];
+
+    const findCallsInExpression = (expr: Expression): void => {
+      if (expr.type === NodeType.FunctionCall) {
+        const funcCall = expr as FunctionCall;
+        calls.push(funcCall.callee);
+        funcCall.arguments.forEach(findCallsInExpression);
+      } else if (expr.type === NodeType.BinaryExpression) {
+        const binExpr = expr as BinaryExpression;
+        findCallsInExpression(binExpr.left);
+        findCallsInExpression(binExpr.right);
+      }
+    };
+
+    const findCallsInStatement = (stmt: Statement): void => {
+      switch (stmt.type) {
+        case NodeType.ExpressionStatement:
+          findCallsInExpression((stmt as ExpressionStatement).expression);
+          break;
+        case NodeType.ReturnStatement:
+          findCallsInExpression((stmt as ReturnStatement).argument);
+          break;
+        case NodeType.VariableDeclaration:
+          findCallsInExpression((stmt as VariableDeclaration).init);
+          break;
+        case NodeType.AssignmentStatement:
+          findCallsInExpression((stmt as AssignmentStatement).value);
+          break;
+        case NodeType.IfStatement:
+          const ifStmt = stmt as IfStatement;
+          findCallsInExpression(ifStmt.condition);
+          findCallsInStatement(ifStmt.thenBranch);
+          if (ifStmt.elseBranch) {
+            findCallsInStatement(ifStmt.elseBranch);
+          }
+          break;
+        case NodeType.WhileStatement:
+          const whileStmt = stmt as WhileStatement;
+          findCallsInExpression(whileStmt.condition);
+          findCallsInStatement(whileStmt.body);
+          break;
+        case NodeType.BlockStatement:
+          (stmt as BlockStatement).statements.forEach(findCallsInStatement);
+          break;
+      }
+    };
+
+    findCallsInStatement(func.body);
+    return calls;
   }
 
   // Dead Code Elimination Phase
@@ -640,6 +731,11 @@ export class IterativeOptimizer {
 
       case NodeType.FunctionCall:
         const funcCall = expr as FunctionCall;
+        if (this.functionPass) {
+          this.functionQueue.push(
+            this._program.functions.find((f) => f.name === funcCall.callee)!,
+          );
+        }
         return {
           ...funcCall,
           arguments: funcCall.arguments.map((arg) => this.cfExpression(arg)),
@@ -801,6 +897,11 @@ export class IterativeOptimizer {
         break;
       case NodeType.FunctionCall:
         const funcCall = expr as FunctionCall;
+        if (this.functionPass) {
+          this.functionQueue.push(
+            this._program.functions.find((f) => f.name === funcCall.callee)!,
+          );
+        }
         for (const arg of funcCall.arguments) {
           this.collectUsedVariablesInExpression(arg);
         }
