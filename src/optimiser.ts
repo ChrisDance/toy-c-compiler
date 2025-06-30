@@ -25,6 +25,7 @@ export interface OptimizationStats {
   deadCodeElimination: number;
   algebraicSimplification: number;
   totalOptimizations: number;
+  functionsRemoved: number;
 }
 
 interface ConstantMap {
@@ -65,6 +66,7 @@ export class IterativeOptimizer {
       deadCodeElimination: 0,
       algebraicSimplification: 0,
       totalOptimizations: 0,
+      functionsRemoved: 0,
     };
     this.constantValues = {};
     this.usedVariables = new Set();
@@ -80,6 +82,9 @@ export class IterativeOptimizer {
     };
   }
 
+  functionQueue: FunctionDeclaration[] = [];
+  _program!: Program;
+  functionPass = false;
   optimize(
     program: Program,
     maxPasses: number = 10,
@@ -87,6 +92,7 @@ export class IterativeOptimizer {
     this.resetStats();
 
     let currentProgram = this.deepClone(program);
+    program = currentProgram;
     let passChanged = true;
 
     while (passChanged && this.stats.passes < maxPasses) {
@@ -160,7 +166,35 @@ export class IterativeOptimizer {
       this.stats.algebraicSimplification;
 
     console.log(`\nOptimization completed after ${this.stats.passes} passes`);
+    this.functionPass = true;
+    if (currentProgram.functions.length === 0) {
+      throw new Error("Program needs at least one function");
+    }
 
+    const b4NumFunctions = currentProgram.functions.length;
+    let main = currentProgram.functions.find((f) => (f.name = "main"))!;
+    if (!main) {
+      throw new Error("Program needs a main function");
+    }
+    const f = currentProgram.functions.indexOf(main);
+    main = currentProgram.functions.splice(f, 1)[0];
+    console.log(main);
+
+    const calledFunctions: Set<string> = new Set();
+    this.functionQueue.push(main);
+    do {
+      const front = this.functionQueue.shift();
+      calledFunctions.add(front?.name!);
+      this.cpFunction(front!);
+    } while (this.functionQueue.length);
+    console.log("set", Array.from(calledFunctions));
+    console.log("sdsada", currentProgram.functions);
+
+    this.stats.functionsRemoved = b4NumFunctions - calledFunctions.size;
+
+    currentProgram.functions = currentProgram.functions.filter((f) =>
+      calledFunctions.has(f.name),
+    );
     return { optimized: currentProgram, stats: { ...this.stats } };
   }
 
@@ -429,6 +463,12 @@ export class IterativeOptimizer {
 
       case NodeType.FunctionCall:
         const funcCall = expr as FunctionCall;
+        if (this.functionPass) {
+          this.functionQueue.push(
+            this._program.functions.find((f) => f.name === funcCall.callee)!,
+          );
+        }
+
         return {
           ...funcCall,
           arguments: funcCall.arguments.map((arg) => this.cpExpression(arg)),

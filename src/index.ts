@@ -4,7 +4,7 @@ import { Lexer } from "./Lexer";
 import { IterativeOptimizer } from "./optimiser";
 import { Parser } from "./parser";
 
-const input = `
+const sourceCode1 = `
 
       int Square(int arg)
       {
@@ -95,17 +95,19 @@ const sourceCode4 = `
 //   }
 // }
 
-const tokens = new Lexer(sourceCode4).scanTokens();
+const tokens = new Lexer(sourceCode1).scanTokens();
 const ast = new Parser(tokens).parse();
 const optimizer = new IterativeOptimizer();
 
 const { optimized: optimizedAst, stats } = optimizer.optimize(ast);
-
+console.log(JSON.stringify(optimizedAst));
 console.log("Optimization Statistics:");
 console.log(`Constant folding optimizations: ${stats.constantFolding}`);
 console.log(`Dead code eliminations: ${stats.deadCodeElimination}`);
 console.log(`Algebraic simplifications: ${stats.algebraicSimplification}`);
+console.log(`Functions removed : ${stats.functionsRemoved}`);
 
-const asm = new ARM64CodeGenerator().generate(optimizedAst);
+let asm = new ARM64CodeGenerator().generate(optimizedAst);
+// asm = new ARM64CodeGenerator().generate(ast);
 
 writeFileSync("output.s", asm);
