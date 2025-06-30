@@ -15,6 +15,7 @@ export enum NodeType {
   BinaryExpression = "BinaryExpression",
   Identifier = "Identifier",
   NumberLiteral = "NumberLiteral",
+  VoidExpression = "VoidExpression",
 }
 
 export interface Node {
@@ -92,6 +93,7 @@ export interface IfStatement extends Node {
 
 export type Expression =
   | BinaryExpression
+  | VoidExpression
   | FunctionCall
   | Identifier
   | NumberLiteral;
@@ -101,6 +103,10 @@ export interface BinaryExpression extends Node {
   operator: string;
   left: Expression;
   right: Expression;
+}
+
+export interface VoidExpression extends Node {
+  type: NodeType.VoidExpression;
 }
 
 export interface FunctionCall extends Node {
@@ -133,7 +139,9 @@ export class Parser {
     const functions: FunctionDeclaration[] = [];
 
     while (!this.isAtEnd()) {
-      functions.push(this.parseFunction());
+      const func = this.parseFunction();
+      this.validateFunction(func); // Add validation
+      functions.push(func);
     }
 
     return {
@@ -157,7 +165,16 @@ export class Parser {
   }
 
   private parseFunction(): FunctionDeclaration {
-    this.consume(TokenType.INT, "Expect return type.");
+    // Parse return type (int or void)
+    let returnType: string;
+    if (this.match(TokenType.INT)) {
+      returnType = "int";
+    } else if (this.match(TokenType.VOID)) {
+      // Add void support
+      returnType = "void";
+    } else {
+      throw this.error(this.peek(), "Expect return type (int or void).");
+    }
 
     const nameToken = this.consume(
       TokenType.IDENTIFIER,
@@ -179,15 +196,12 @@ export class Parser {
         params.push({
           type: NodeType.Parameter,
           name: paramName.lexeme,
-          paramType: "int" /** only support ints's */,
+          paramType: "int",
         });
-
-        /** for multiple args */
       } while (this.match(TokenType.COMMA));
     }
 
     this.consume(TokenType.RIGHT_PAREN, "Expect ')' after parameters.");
-
     this.consume(TokenType.LEFT_BRACE, "Expect '{' before function body.");
     const body = this.parseBlock();
 
@@ -195,7 +209,7 @@ export class Parser {
       type: NodeType.FunctionDeclaration,
       name: nameToken.lexeme,
       params,
-      returnType: "int",
+      returnType, // Use the parsed return type instead of hard-coded "int"
       body,
     };
   }
@@ -282,8 +296,16 @@ export class Parser {
   }
 
   private parseReturnStatement(): ReturnStatement {
-    const expression = this.parseExpression();
-    this.consume(TokenType.SEMICOLON, "Expect ';' after return value.");
+    let expression: Expression | null = null;
+
+    // Check if there's an expression after return
+    if (!this.check(TokenType.SEMICOLON)) {
+      expression = this.parseExpression();
+    } else {
+      expression = { type: NodeType.VoidExpression } as VoidExpression;
+    }
+
+    this.consume(TokenType.SEMICOLON, "Expect ';' after return statement.");
 
     return {
       type: NodeType.ReturnStatement,
@@ -473,5 +495,62 @@ export class Parser {
         ? `Line ${token.line}: Error at end: ${message}`
         : `Line ${token.line}: Error at '${token.lexeme}': ${message}`;
     return new Error(errorMsg);
+  }
+
+  private validateFunction(func: FunctionDeclaration): void {
+    if (func.returnType === "void") {
+      // Check that all return statements in void functions have no value
+      this.validateVoidReturns(func.body);
+    } else {
+      // Check that all return statements in non-void functions have a value
+      this.validateNonVoidReturns(func.body);
+    }
+  }
+
+  private validateVoidReturns(stmt: Statement): void {
+    if (stmt.type === NodeType.ReturnStatement) {
+      const returnStmt = stmt as ReturnStatement;
+
+      if (returnStmt.argument.type != NodeType.VoidExpression) {
+        throw new Error("Void function cannot return a value");
+      }
+    } else if (stmt.type === NodeType.BlockStatement) {
+      const block = stmt as BlockStatement;
+      for (const s of block.statements) {
+        this.validateVoidReturns(s);
+      }
+    } else if (stmt.type === NodeType.IfStatement) {
+      const ifStmt = stmt as IfStatement;
+      this.validateVoidReturns(ifStmt.thenBranch);
+      if (ifStmt.elseBranch) {
+        this.validateVoidReturns(ifStmt.elseBranch);
+      }
+    } else if (stmt.type === NodeType.WhileStatement) {
+      const whileStmt = stmt as WhileStatement;
+      this.validateVoidReturns(whileStmt.body);
+    }
+  }
+
+  private validateNonVoidReturns(stmt: Statement): void {
+    if (stmt.type === NodeType.ReturnStatement) {
+      const returnStmt = stmt as ReturnStatement;
+      if (returnStmt.argument.type === NodeType.VoidExpression) {
+        throw new Error("Non-void function must return a value");
+      }
+    } else if (stmt.type === NodeType.BlockStatement) {
+      const block = stmt as BlockStatement;
+      for (const s of block.statements) {
+        this.validateNonVoidReturns(s);
+      }
+    } else if (stmt.type === NodeType.IfStatement) {
+      const ifStmt = stmt as IfStatement;
+      this.validateNonVoidReturns(ifStmt.thenBranch);
+      if (ifStmt.elseBranch) {
+        this.validateNonVoidReturns(ifStmt.elseBranch);
+      }
+    } else if (stmt.type === NodeType.WhileStatement) {
+      const whileStmt = stmt as WhileStatement;
+      this.validateNonVoidReturns(whileStmt.body);
+    }
   }
 }

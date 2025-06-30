@@ -174,4 +174,47 @@ describe("Parser", () => {
     expect(program.functions[0].name).toBe("Square");
     expect(program.functions[1].name).toBe("main");
   });
+
+  test("should parse void function", () => {
+    const input = `
+      void test() {
+        return;
+      }
+    `;
+
+    const program = parseCode(input);
+    const func = program.functions[0];
+
+    expect(func.returnType).toBe("void");
+    expect(func.name).toBe("test");
+
+    const returnStmt = func.body.statements[0];
+    expect(returnStmt.type).toBe(NodeType.ReturnStatement);
+
+    expect((returnStmt as any).argument.type).toBe(NodeType.VoidExpression);
+  });
+
+  test("should reject void function with return value", () => {
+    const input = `
+      void test() {
+        return 42;
+      }
+    `;
+
+    expect(() => parseCode(input)).toThrow(
+      "Void function cannot return a value",
+    );
+  });
+
+  test("should reject non-void function without return value", () => {
+    const input = `
+      int test() {
+        return;
+      }
+    `;
+
+    expect(() => parseCode(input)).toThrow(
+      "Non-void function must return a value",
+    );
+  });
 });

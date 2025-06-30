@@ -1,5 +1,6 @@
 export enum TokenType {
   INT = "INT",
+  VOID = "VOID",
   RETURN = "RETURN",
   IF = "IF",
   ELSE = "ELSE",
@@ -142,6 +143,8 @@ export class Lexer {
     let type = TokenType.IDENTIFIER;
     if (text === "int") {
       type = TokenType.INT;
+    } else if (text == "void") {
+      type = TokenType.VOID;
     } else if (text === "return") {
       type = TokenType.RETURN;
     } else if (text === "if") {

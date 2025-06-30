@@ -6,8 +6,10 @@ import {
   FunctionDeclaration,
   Identifier,
   IfStatement,
+  NodeType,
   NumberLiteral,
   Program,
+  ReturnStatement,
   Statement,
   WhileStatement,
 } from "./parser";
@@ -265,13 +267,23 @@ export class ARM64CodeGenerator {
     }
   }
 
+  private generateReturnStatement(stmt: ReturnStatement): void {
+    // Only generate expression code if there's an argument
+    if (stmt.type == NodeType.ReturnStatement) {
+      const exprCode = this.generateExpression(stmt.argument);
+      this.addLines(exprCode);
+      // Result is now in w0, which is the return register
+    }
+    // For void functions, we don't set w0
+
+    // Jump to function end for cleanup
+    this.addLine(`\tb\t${this.functionEndLabel}`);
+  }
+
   private generateStatement(stmt: Statement): void {
     switch (stmt.type) {
       case "ReturnStatement":
-        const returnCode = this.generateExpression(stmt.argument);
-        this.addLines(returnCode);
-        // Jump to function end (epilogue) instead of continuing
-        this.addLine(`\tb\t${this.functionEndLabel}`);
+        this.generateReturnStatement(stmt);
         break;
       case "BlockStatement":
         this.generateBlock(stmt);
@@ -433,7 +445,8 @@ export class ARM64CodeGenerator {
 
       case "NumberLiteral":
         return this.generateNumberLiteral(expr);
-
+      case "VoidExpression":
+        return [];
       default:
         return [];
     }

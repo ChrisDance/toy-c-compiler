@@ -3,6 +3,20 @@ export const code_samples: CodeSample[] = [];
 
 export const working = [
   {
+    code: `
+    void printNumber() {
+         printf(42);
+         return;
+       }
+
+       int main() {
+         printNumber();
+         return 0;
+       }
+    `,
+    output: 42,
+  },
+  {
     code: `int main() {
     int result = 5;
     if (1 == 1) {
