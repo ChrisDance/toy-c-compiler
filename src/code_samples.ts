@@ -1,7 +1,7 @@
 export type CodeSample = { code: string; output: number };
 export const code_samples: CodeSample[] = [
   // Test 9: Constant condition folding
-  //  NOT WORKING
+  //  NOT WORKING as result is being replaced wit
   {
     code: `int main() {
     int result = 5;
@@ -43,6 +43,12 @@ export const code_samples: CodeSample[] = [
   },
   // Test 12: Multiple optimization opportunities
   //  NOT WORKING
+];
+
+export const working = [
+  // code_samples[0],
+  //
+  // Test exit
   {
     code: `int main() {
     int a = 2 + 3;
@@ -57,12 +63,6 @@ export const code_samples: CodeSample[] = [
   }`,
     output: 5, // All operations simplify to 5
   },
-];
-
-export const working = [
-  // code_samples[0],
-  //
-  // Test exit
   {
     code: `
       int main()

@@ -12,6 +12,48 @@ import {
   WhileStatement,
 } from "./parser";
 
+class RegisterAllocator {
+  private availableRegs = [
+    "w8",
+    "w9",
+    "w10",
+    "w11",
+    "w12",
+    "w13",
+    "w14",
+    "w15",
+  ];
+  private usedRegs: string[] = [];
+
+  allocate(): string {
+    if (this.availableRegs.length === 0) {
+      throw new Error("No more registers available - expression too complex");
+    }
+    const reg = this.availableRegs.shift()!;
+    this.usedRegs.push(reg);
+    return reg;
+  }
+
+  release(reg: string): void {
+    const index = this.usedRegs.indexOf(reg);
+    if (index !== -1) {
+      this.usedRegs.splice(index, 1);
+      this.availableRegs.unshift(reg);
+    }
+  }
+
+  // Reset for each function
+  reset(): void {
+    this.availableRegs = ["w8", "w9", "w10", "w11", "w12", "w13", "w14", "w15"];
+    this.usedRegs = [];
+  }
+
+  // Check if we have registers available
+  hasAvailable(): boolean {
+    return this.availableRegs.length > 0;
+  }
+}
+
 export class ARM64CodeGenerator {
   private output: string[] = [];
   private currentFunction: string = "";
@@ -23,7 +65,7 @@ export class ARM64CodeGenerator {
   private stringLiterals: Map<string, string> = new Map();
   private labelCounter: number = 0;
   private stringLiteralCounter: number = 0;
-
+  private regAlloc: RegisterAllocator = new RegisterAllocator();
   private nextOffsetMap: Map<string, number> = new Map();
 
   /**
@@ -149,6 +191,8 @@ export class ARM64CodeGenerator {
 
     // Create a unique end label for this function
     this.functionEndLabel = this.generateLabel("function_end");
+
+    this.regAlloc.reset();
 
     const isMain = func.name === "main";
     this.nextOffsetMap.set(func.name, isMain ? -4 : 16);
@@ -398,14 +442,87 @@ export class ARM64CodeGenerator {
   private generateBinaryExpression(expr: BinaryExpression): string[] {
     const result: string[] = [];
 
+    // Check if we have enough registers
+    if (!this.regAlloc.hasAvailable()) {
+      // Fall back to stack-based approach
+      return this.generateBinaryExpressionStackBased(expr);
+    }
+
+    // Generate left operand
     const leftCode = this.generateExpression(expr.left);
     result.push(...leftCode);
-    result.push("\tmov\tw8, w0");
 
+    // Allocate register for left operand
+    const leftReg = this.regAlloc.allocate();
+    result.push(`\tmov\t${leftReg}, w0`);
+
+    // Generate right operand
+    const rightCode = this.generateExpression(expr.right);
+    result.push(...rightCode);
+
+    // Allocate register for right operand
+    const rightReg = this.regAlloc.allocate();
+    result.push(`\tmov\t${rightReg}, w0`);
+
+    // Perform operation
+    switch (expr.operator) {
+      case "*":
+        result.push(`\tmul\tw0, ${leftReg}, ${rightReg}`);
+        break;
+      case "+":
+        result.push(`\tadd\tw0, ${leftReg}, ${rightReg}`);
+        break;
+      case "-":
+        result.push(`\tsub\tw0, ${leftReg}, ${rightReg}`);
+        break;
+      case "/":
+        result.push(`\tsdiv\tw0, ${leftReg}, ${rightReg}`);
+        break;
+      case "<":
+        result.push(`\tcmp\t${leftReg}, ${rightReg}`);
+        result.push("\tcset\tw0, lt");
+        break;
+      case ">":
+        result.push(`\tcmp\t${leftReg}, ${rightReg}`);
+        result.push("\tcset\tw0, gt");
+        break;
+      case "==":
+        result.push(`\tcmp\t${leftReg}, ${rightReg}`);
+        result.push("\tcset\tw0, eq");
+        break;
+      default:
+        throw new Error(`Unsupported binary operator: ${expr.operator}`);
+    }
+
+    // Release registers
+    this.regAlloc.release(leftReg);
+    this.regAlloc.release(rightReg);
+
+    return result;
+  }
+
+  // STEP 5: Add this fallback method for very complex expressions
+  private generateBinaryExpressionStackBased(expr: BinaryExpression): string[] {
+    const result: string[] = [];
+
+    // Generate left operand
+    const leftCode = this.generateExpression(expr.left);
+    result.push(...leftCode);
+
+    // Save to stack
+    result.push("\tsub\tsp, sp, #16");
+    result.push("\tstr\tw0, [sp]");
+
+    // Generate right operand
     const rightCode = this.generateExpression(expr.right);
     result.push(...rightCode);
     result.push("\tmov\tw9, w0");
 
+    // Restore from stack
+    result.push("\tldr\tw8, [sp]");
+    result.push("\tadd\tsp, sp, #16");
+
+    // Perform operation with w8 (left) and w9 (right)
     switch (expr.operator) {
       case "*":
         result.push("\tmul\tw0, w8, w9");
@@ -437,7 +554,6 @@ export class ARM64CodeGenerator {
 
     return result;
   }
-
   private generateFunctionCall(expr: FunctionCall): string[] {
     if (expr.callee in this.specialFunctions) {
       return this.specialFunctions[expr.callee](expr.arguments);

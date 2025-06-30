@@ -1,30 +1,19 @@
 	.section	__TEXT,__text,regular,pure_instructions
 	.build_version macos, 15, 0	sdk_version 15, 4
 
-	.globl	_recurse					 ; -- Begin function recurse
+	.globl	_func					 ; -- Begin function func
 	.p2align	2
-_recurse:						 ; @recurse
+_func:						 ; @func
 	sub	sp, sp, #160
 	stp	x29, x30, [sp, #144]
 	add	x29, sp, #144
 	str	w0, [sp, #16]
+	str	w1, [sp, #20]
 	ldr	w0, [sp, #16]
 	mov	w8, w0
-	mov	w0, #5				; =0x5
-	mov	w9, w0
-	cmp	w8, w9
-	cset	w0, gt
-	cmp	w0, #0
-	beq	L1_endif
-	ldr	w0, [sp, #16]
-	b	L0_function_end
-L1_endif:
-	ldr	w0, [sp, #16]
-	mov	w8, w0
-	mov	w0, #1				; =0x1
+	ldr	w0, [sp, #20]
 	mov	w9, w0
 	add	w0, w8, w9
-	bl	_recurse
 	b	L0_function_end
 L0_function_end:
 	ldp	x29, x30, [sp, #144]
@@ -38,8 +27,13 @@ _main:						 ; @main
 	sub	sp, sp, #48
 	stp	x29, x30, [sp, #32]			 ; 16-byte Folded Spill
 	add	x29, sp, #32
-	mov	w0, #1				; =0x1
-	bl	_recurse
+	mov	w0, #5				; =0x5
+	stur	w0, [x29, #-4]
+	mov	w0, #5				; =0x5
+	stur	w0, [x29, #0]
+	ldur	w0, [x29, #-4]
+	ldur	w1, [x29, #0]
+	bl	_func
 mov x9, sp
 mov x8, x0
 str x8, [x9]
@@ -47,8 +41,8 @@ adrp x0, l_.str.0@PAGE
 add x0, x0, l_.str.0@PAGEOFF
 bl _printf
 	mov	w0, #0				; =0x0
-	b	L2_function_end
-L2_function_end:
+	b	L1_function_end
+L1_function_end:
 	ldp	x29, x30, [sp, #32]			 ; 16-byte Folded Reload
 	add	sp, sp, #48
 	ret
