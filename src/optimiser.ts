@@ -444,9 +444,12 @@ export class IterativeOptimizer {
     };
   }
 
+  // Complete fix for the cpStatement method in your IterativeOptimizer class
+  // Replace the existing cpStatement method with this updated version
+
   private cpStatement(stmt: Statement): Statement {
     switch (stmt.type) {
-      case NodeType.VariableDeclaration:
+      case NodeType.VariableDeclaration: {
         const varDecl = stmt as VariableDeclaration;
         const init = this.cpExpression(varDecl.init);
 
@@ -459,7 +462,7 @@ export class IterativeOptimizer {
           ...varDecl,
           init,
         };
-
+      }
       case NodeType.AssignmentStatement:
         const assignment = stmt as AssignmentStatement;
         const value = this.cpExpression(assignment.value);
@@ -478,16 +481,88 @@ export class IterativeOptimizer {
           value,
         };
 
-      case NodeType.IfStatement:
+      case NodeType.IfStatement: {
         const ifStmt = stmt as IfStatement;
+        const condition = this.cpExpression(ifStmt.condition);
+
+        // FIXED: Check if condition is a constant (conditional constant propagation)
+        if (condition.type === NodeType.NumberLiteral) {
+          const condValue = (condition as NumberLiteral).value;
+          this.currentPassStats.constantPropagation++;
+          this.phaseChanged = true;
+
+          if (condValue !== 0) {
+            // Condition is true - only process then branch
+            console.log(
+              `  CP: Condition always true, processing only then branch`,
+            );
+            return this.cpStatement(ifStmt.thenBranch);
+          } else {
+            // Condition is false - only process else branch (if it exists)
+            console.log(
+              `  CP: Condition always false, processing only else branch`,
+            );
+            return ifStmt.elseBranch
+              ? this.cpStatement(ifStmt.elseBranch)
+              : { type: NodeType.BlockStatement, statements: [] };
+          }
+        }
+
+        // Condition is not constant - need to handle both branches carefully
+        // Save current constant state before processing branches
+        const savedConstants = { ...this.constantValues };
+
+        // Process then branch
+        const thenBranch = this.cpStatement(ifStmt.thenBranch);
+        const thenConstants = { ...this.constantValues };
+
+        // Restore state and process else branch
+        this.constantValues = { ...savedConstants };
+        const elseBranch = ifStmt.elseBranch
+          ? this.cpStatement(ifStmt.elseBranch)
+          : null;
+        const elseConstants = { ...this.constantValues };
+
+        // Merge constant states: keep only variables that have the same constant value in both branches
+        this.constantValues = {};
+        for (const varName in savedConstants) {
+          const originalValue = savedConstants[varName];
+          const thenValue = thenConstants[varName];
+          const elseValue = elseConstants[varName];
+
+          // If variable has same constant value in both branches, keep it as constant
+          if (
+            thenValue !== undefined &&
+            elseValue !== undefined &&
+            thenValue === elseValue
+          ) {
+            this.constantValues[varName] = thenValue;
+          } else if (
+            !ifStmt.elseBranch &&
+            thenValue !== undefined &&
+            thenValue === originalValue
+          ) {
+            // No else branch and then branch didn't change the value - keep original
+            this.constantValues[varName] = originalValue;
+          } else if (!ifStmt.elseBranch && originalValue !== undefined) {
+            // No else branch, keep variables that weren't modified in then branch
+            if (
+              !(varName in thenConstants) ||
+              thenConstants[varName] === originalValue
+            ) {
+              this.constantValues[varName] = originalValue;
+            }
+          }
+          // Otherwise, variable is no longer constant after the if statement
+        }
+
         return {
           ...ifStmt,
-          condition: this.cpExpression(ifStmt.condition),
-          thenBranch: this.cpStatement(ifStmt.thenBranch),
-          elseBranch: ifStmt.elseBranch
-            ? this.cpStatement(ifStmt.elseBranch)
-            : null,
+          condition,
+          thenBranch,
+          elseBranch,
         };
+      }
 
       case NodeType.WhileStatement:
         const whileStmt = stmt as WhileStatement;

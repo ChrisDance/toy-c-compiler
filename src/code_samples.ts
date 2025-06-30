@@ -1,13 +1,5 @@
 export type CodeSample = { code: string; output: number };
-export const code_samples: CodeSample[] = [
-  // Test 9: Constant condition folding
-  //  NOT WORKING as result is being replaced wit
-  // Test 7: Complex expression optimization
-  //  NOT WORKING
-  // NOT WORKING
-  // Test 12: Multiple optimization opportunities
-  //  NOT WORKING
-];
+export const code_samples: CodeSample[] = [];
 
 export const working = [
   {
