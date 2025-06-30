@@ -1,7 +1,7 @@
 import { execSync } from "child_process";
 import * as fs from "fs";
 import * as path from "path";
-import { code_samples } from "../src/code_samples";
+import { working } from "../src/code_samples";
 import { ARM64CodeGenerator } from "../src/codegen";
 import { Lexer } from "../src/Lexer";
 import { IterativeOptimizer } from "../src/optimiser";
@@ -102,7 +102,7 @@ describe("ARM64 Compiler Integration Tests", () => {
     "should compile and execute a comprehensive program with all language features",
     async () => {
       let i = 1;
-      for (const sample of code_samples) {
+      for (const sample of working) {
         // Sanitize the test name to avoid spaces and special characters in filenames
         const sanitizedTestName = `sample_test_${i}`;
         const sanitizedOptimizedTestName = `sample_test_optimized_${i}`;

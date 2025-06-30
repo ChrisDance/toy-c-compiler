@@ -7,7 +7,7 @@ _main:						 ; @main
 	sub	sp, sp, #48
 	stp	x29, x30, [sp, #32]			 ; 16-byte Folded Spill
 	add	x29, sp, #32
-	mov	w0, #1				; =0x1
+	mov	w0, #0				; =0x0
 mov x9, sp
 mov x8, x0
 str x8, [x9]
@@ -15,6 +15,8 @@ adrp x0, l_.str.0@PAGE
 add x0, x0, l_.str.0@PAGEOFF
 bl _printf
 	mov	w0, #0				; =0x0
+	b	L0_function_end
+L0_function_end:
 	ldp	x29, x30, [sp, #32]			 ; 16-byte Folded Reload
 	add	sp, sp, #48
 	ret

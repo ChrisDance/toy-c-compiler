@@ -60,6 +60,23 @@ export const code_samples: CodeSample[] = [
 ];
 
 export const working = [
+  // Test case for recursion:
+  {
+    code: `int recurse(int n) {
+              if(n > 5)
+              {
+                 return n;
+              }
+
+              return recurse(n + 1);
+
+        }
+      int main() {
+          printf(recurse(1));
+          return 0;
+      }`,
+    output: 6,
+  },
   // Test 1: Function calls with nested expressions and control flow
   //
   {
@@ -224,5 +241,23 @@ export const working = [
     return 0;
   }`,
     output: 42, // All operations are identity operations, returns input
+  },
+  // //Test 16 bigger stack
+  {
+    code: `
+
+
+     int a(int i) {return 1 + i;}
+     int b(int i) {return 1 + i;}
+     int c(int i) {return 1 + i;}
+     int d(int i) {return 1 + i;}
+     int e(int i) {return 1 + i;}
+    int f(int i) {return 1 + i;}
+
+   int main() {
+     printf(a(b(c(d(e(f(1)))))));
+     return 0;
+   }`,
+    output: 7, // All operations are identity operations, returns input
   },
 ];

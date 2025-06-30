@@ -7,17 +7,21 @@ _main:						 ; @main
 	sub	sp, sp, #48
 	stp	x29, x30, [sp, #32]			 ; 16-byte Folded Spill
 	add	x29, sp, #32
-	mov	w8, #42				; =0x2a
+	mov	w8, #10				; =0xa
 	stur	w8, [x29, #-4]
 	ldur	w0, [x29, #-4]
 	mov	w8, w0
-	mov	w0, #2				; =0x2
+	mov	w0, #5				; =0x5
 	mov	w9, w0
-	mul	w0, w8, w9
-	stur	w0, [x29, #-8]
-	mov	w8, #10				; =0xa
-	stur	w8, [x29, #-12]
-	ldur	w0, [x29, #-12]
+	add	w0, w8, w9
+	stur	w0, [x29, #-4]
+	mov	w0, #0				; =0x0
+	mov	w8, w0
+	ldur	w0, [x29, #-4]
+	mov	w9, w0
+	add	w0, w8, w9
+	stur	w0, [x29, #-4]
+	ldur	w0, [x29, #-4]
 mov x9, sp
 mov x8, x0
 str x8, [x9]
@@ -25,6 +29,8 @@ adrp x0, l_.str.0@PAGE
 add x0, x0, l_.str.0@PAGEOFF
 bl _printf
 	mov	w0, #0				; =0x0
+	b	L0_function_end
+L0_function_end:
 	ldp	x29, x30, [sp, #32]			 ; 16-byte Folded Reload
 	add	sp, sp, #48
 	ret

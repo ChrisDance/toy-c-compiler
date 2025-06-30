@@ -15,6 +15,7 @@ import {
 export class ARM64CodeGenerator {
   private output: string[] = [];
   private currentFunction: string = "";
+  private functionEndLabel: string = "";
   private varLocationMap: Map<
     string,
     Map<string, { frameRelative: boolean; offset: number }>
@@ -106,6 +107,9 @@ export class ARM64CodeGenerator {
     this.currentFunction = func.name;
     this.varLocationMap.set(func.name, new Map());
 
+    // Create a unique end label for this function
+    this.functionEndLabel = this.generateLabel("function_end");
+
     const isMain = func.name === "main";
     this.nextOffsetMap.set(func.name, isMain ? -4 : 16);
 
@@ -123,6 +127,9 @@ export class ARM64CodeGenerator {
       this.addLine("\tadd\tx29, sp, #32");
 
       this.generateBlock(func.body);
+
+      // Add the function end label BEFORE epilogue
+      this.addLine(`${this.functionEndLabel}:`);
 
       /* main epilogue */
       this.addLine("\tldp\tx29, x30, [sp, #32]\t\t\t ; 16-byte Folded Reload");
@@ -149,6 +156,9 @@ export class ARM64CodeGenerator {
 
       this.generateBlock(func.body);
 
+      // Add the function end label BEFORE epilogue
+      this.addLine(`${this.functionEndLabel}:`);
+
       // Non-main function epilogue
       this.addLine(`\tldp\tx29, x30, [sp, #${totalStackSize - 16}]`);
       this.addLine(`\tadd\tsp, sp, #${totalStackSize}`);
@@ -169,6 +179,8 @@ export class ARM64CodeGenerator {
       case "ReturnStatement":
         const returnCode = this.generateExpression(stmt.argument);
         this.addLines(returnCode);
+        // Jump to function end (epilogue) instead of continuing
+        this.addLine(`\tb\t${this.functionEndLabel}`);
         break;
       case "BlockStatement":
         this.generateBlock(stmt);
@@ -278,18 +290,22 @@ export class ARM64CodeGenerator {
     const endLabel = this.generateLabel("endif");
     const elseLabel = stmt.elseBranch ? this.generateLabel("else") : endLabel;
 
+    // Generate condition
     const conditionCode = this.generateExpression(stmt.condition);
     this.addLines(conditionCode);
 
+    // Jump to else/end if condition is false
     this.addLine("\tcmp\tw0, #0");
     this.addLine(`\tbeq\t${elseLabel}`);
 
+    // Generate THEN branch
     if (stmt.thenBranch.type === "BlockStatement") {
       this.generateBlock(stmt.thenBranch);
     } else {
       this.generateStatement(stmt.thenBranch);
     }
 
+    // If there's an else branch, jump over it after executing then branch
     if (stmt.elseBranch) {
       this.addLine(`\tb\t${endLabel}`);
       this.addLine(`${elseLabel}:`);
@@ -373,23 +389,21 @@ export class ARM64CodeGenerator {
 
     const result: string[] = [];
 
-    // Generate code for all arguments and place them in correct registers
-    for (let i = 0; i < expr.arguments.length; i++) {
-      const argCode = this.generateExpression(expr.arguments[i]);
-      result.push(...argCode);
-
-      // ARM64 calling convention: first 8 arguments go in w0-w7
-      if (i < 8) {
-        if (i > 0) {
-          result.push(`\tmov\tw${i}, w0`);
-        }
-        // First argument stays in w0
-      } else {
-        // Additional arguments would go on stack (not implemented for this toy compiler)
-        throw new Error("More than 8 function arguments not supported");
-      }
+    // For educational compiler - only support single parameter
+    if (expr.arguments.length > 1) {
+      throw new Error(
+        "Multiple function arguments not supported in this educational compiler",
+      );
     }
 
+    if (expr.arguments.length === 1) {
+      // Generate the single argument expression
+      const argCode = this.generateExpression(expr.arguments[0]);
+      result.push(...argCode);
+      // Argument is now in w0, which is where ARM64 expects first parameter
+    }
+
+    // Call the function
     result.push(`\tbl\t_${expr.callee}`);
 
     return result;
