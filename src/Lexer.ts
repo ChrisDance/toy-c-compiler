@@ -9,7 +9,7 @@ export enum TokenType {
   IDENTIFIER = "IDENTIFIER",
   NUMBER = "NUMBER",
 
-  MULTIPLY = "MULTIPLY",
+  MULTIPLY = "MULTIPLY", // Also used for pointer dereference
   PLUS = "PLUS",
   DIVIDE = "DIVIDE",
   MINUS = "MINUS",
@@ -17,6 +17,7 @@ export enum TokenType {
   LESS_THAN = "LESS_THAN",
   GREATER_THAN = "GREATER_THAN",
   EQUAL_EQUAL = "EQUAL_EQUAL",
+  AMPERSAND = "AMPERSAND", // For address-of operator &
 
   LEFT_PAREN = "LEFT_PAREN",
   RIGHT_PAREN = "RIGHT_PAREN",
@@ -102,6 +103,9 @@ export class Lexer {
       case ">":
         this.addToken(TokenType.GREATER_THAN);
         break;
+      case "&":
+        this.addToken(TokenType.AMPERSAND);
+        break;
       case "=":
         if (this.match("=")) {
           this.addToken(TokenType.EQUAL_EQUAL);
@@ -163,22 +167,21 @@ export class Lexer {
 
     if (this.peek() === "." && this.isDigit(this.peekNext())) {
       this.advance();
-
       while (this.isDigit(this.peek())) this.advance();
     }
 
     this.addToken(
       TokenType.NUMBER,
-      parseFloat(this.source.substring(this.start, this.current)),
+      parseInt(this.source.substring(this.start, this.current)),
     );
   }
 
-  private isAtEnd(): boolean {
-    return this.current >= this.source.length;
-  }
+  private match(expected: string): boolean {
+    if (this.isAtEnd()) return false;
+    if (this.source.charAt(this.current) !== expected) return false;
 
-  private advance(): string {
-    return this.source.charAt(this.current++);
+    this.current++;
+    return true;
   }
 
   private peek(): string {
@@ -191,15 +194,27 @@ export class Lexer {
     return this.source.charAt(this.current + 1);
   }
 
-  private match(expected: string): boolean {
-    if (this.isAtEnd()) return false;
-    if (this.source.charAt(this.current) !== expected) return false;
-
-    this.current++;
-    return true;
+  private isAlpha(c: string): boolean {
+    return (c >= "a" && c <= "z") || (c >= "A" && c <= "Z") || c === "_";
   }
 
-  private addToken(type: TokenType, literal: any = null): void {
+  private isAlphaNumeric(c: string): boolean {
+    return this.isAlpha(c) || this.isDigit(c);
+  }
+
+  private isDigit(c: string): boolean {
+    return c >= "0" && c <= "9";
+  }
+
+  private isAtEnd(): boolean {
+    return this.current >= this.source.length;
+  }
+
+  private advance(): string {
+    return this.source.charAt(this.current++);
+  }
+
+  private addToken(type: TokenType, literal?: any): void {
     const text = this.source.substring(this.start, this.current);
     this.tokens.push({
       type,
@@ -207,17 +222,5 @@ export class Lexer {
       literal,
       line: this.line,
     });
-  }
-
-  private isDigit(c: string): boolean {
-    return c >= "0" && c <= "9";
-  }
-
-  private isAlpha(c: string): boolean {
-    return (c >= "a" && c <= "z") || (c >= "A" && c <= "Z") || c === "_";
-  }
-
-  private isAlphaNumeric(c: string): boolean {
-    return this.isAlpha(c) || this.isDigit(c);
   }
 }
