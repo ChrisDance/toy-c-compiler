@@ -2,7 +2,6 @@ import {
   BinaryExpression,
   BlockStatement,
   Expression,
-  WhileStatement,
   FunctionCall,
   FunctionDeclaration,
   Identifier,
@@ -10,6 +9,7 @@ import {
   NumberLiteral,
   Program,
   Statement,
+  WhileStatement,
 } from "./parser";
 
 export class ARM64CodeGenerator {
@@ -158,7 +158,9 @@ export class ARM64CodeGenerator {
         const returnCode = this.generateExpression(stmt.argument);
         this.addLines(returnCode);
         break;
-
+      case "BlockStatement":
+        this.generateBlock(stmt);
+        break;
       case "VariableDeclaration":
         const isMain = this.currentFunction === "main";
 
@@ -291,6 +293,7 @@ export class ARM64CodeGenerator {
   }
 
   private generateExpression(expr: Expression): string[] {
+    console.log("gen expree", expr);
     switch (expr.type) {
       case "BinaryExpression":
         return this.generateBinaryExpression(expr);
@@ -353,6 +356,7 @@ export class ARM64CodeGenerator {
   }
 
   private generateFunctionCall(expr: FunctionCall): string[] {
+    console.log("gen function call", expr);
     if (expr.callee in this.specialFunctions) {
       return this.specialFunctions[expr.callee](expr.arguments);
     }

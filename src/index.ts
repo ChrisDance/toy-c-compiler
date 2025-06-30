@@ -100,14 +100,14 @@ const ast = new Parser(tokens).parse();
 const optimizer = new IterativeOptimizer();
 
 const { optimized: optimizedAst, stats } = optimizer.optimize(ast);
-console.log(JSON.stringify(optimizedAst));
-console.log("Optimization Statistics:");
-console.log(`Constant folding optimizations: ${stats.constantFolding}`);
-console.log(`Dead code eliminations: ${stats.deadCodeElimination}`);
-console.log(`Algebraic simplifications: ${stats.algebraicSimplification}`);
-console.log(`Functions removed : ${stats.functionsRemoved}`);
+// console.log(JSON.stringify(optimizedAst));
+// console.log("Optimization Statistics:");
+// console.log(`Constant folding optimizations: ${stats.constantFolding}`);
+// console.log(`Dead code eliminations: ${stats.deadCodeElimination}`);
+// console.log(`Algebraic simplifications: ${stats.algebraicSimplification}`);
+// console.log(`Functions removed : ${stats.functionsRemoved}`);
 
-let asm = new ARM64CodeGenerator().generate(optimizedAst);
-// asm = new ARM64CodeGenerator().generate(ast);
+let asm;
+asm = new ARM64CodeGenerator().generate(optimizedAst);
 
 writeFileSync("output.s", asm);

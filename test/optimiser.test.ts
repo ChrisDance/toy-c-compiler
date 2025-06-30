@@ -1,5 +1,5 @@
 // test/enhanced-optimizer.test.ts
-import { EnhancedOptimizer } from "../src/enhanced_optimiser";
+import { IterativeOptimizer } from "../src/optimiser";
 
 import { Lexer } from "../src/Lexer";
 import { Parser } from "../src/parser";
@@ -11,7 +11,7 @@ describe("Enhanced Optimizer", () => {
     const parser = new Parser(tokens);
     const program = parser.parse();
 
-    const optimizer = new EnhancedOptimizer();
+    const optimizer = new IterativeOptimizer();
     return optimizer.optimize(program, maxPasses);
   }
 

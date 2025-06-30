@@ -1,34 +1,6 @@
 	.section	__TEXT,__text,regular,pure_instructions
 	.build_version macos, 15, 0	sdk_version 15, 4
 
-	.globl	_countdown					 ; -- Begin function countdown
-	.p2align	2
-_countdown:						 ; @countdown
-	sub	sp, sp, #32
-	mov	w8, #10				; =0xa
-	str	w8, [sp, #8]
-L0_loop_start:
-	ldr	w0, [sp, #8]
-	mov	w8, w0
-	mov	w0, #3				; =0x3
-	mov	w9, w0
-	cmp	w8, w9
-	cset	w0, gt
-	cmp	w0, #0
-	beq	L1_loop_end
-	ldr	w0, [sp, #8]
-	mov	w8, w0
-	mov	w0, #1				; =0x1
-	mov	w9, w0
-	sub	w0, w8, w9
-	str	w0, [sp, #8]
-	b	L0_loop_start
-L1_loop_end:
-	ldr	w0, [sp, #8]
-	add	sp, sp, #32
-	ret
-							 ; -- End function
-
 	.globl	_main					 ; -- Begin function main
 	.p2align	2
 _main:						 ; @main

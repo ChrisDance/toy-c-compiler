@@ -1,9 +1,10 @@
+import { execSync } from "child_process";
 import * as fs from "fs";
 import * as path from "path";
-import { execSync } from "child_process";
-import { Lexer } from "../src/Lexer";
-import { Parser } from "../src/parser";
 import { ARM64CodeGenerator } from "../src/codegen";
+import { Lexer } from "../src/Lexer";
+import { IterativeOptimizer } from "../src/optimiser";
+import { Parser } from "../src/parser";
 
 /**
  * Integration test for the ARM64 compiler.
@@ -34,9 +35,10 @@ describe("ARM64 Compiler Integration Tests", () => {
     const lexer = new Lexer(sourceCode);
     const tokens = lexer.scanTokens();
     const parser = new Parser(tokens);
-    const program = parser.parse();
+    let program = parser.parse();
 
     const codeGen = new ARM64CodeGenerator();
+    program = new IterativeOptimizer().optimize(program).optimized;
     const assembly = codeGen.generate(program);
 
     fs.writeFileSync(outputPath, assembly);
