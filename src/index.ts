@@ -1,8 +1,8 @@
 import { writeFileSync } from "fs";
 import { ARM64CodeGenerator } from "./codegen";
 import { Lexer } from "./Lexer";
+import { IterativeOptimizer } from "./optimiser";
 import { Parser } from "./parser";
-import { BasicOptimizer } from "./optimiser";
 
 const input = `
 
@@ -41,9 +41,63 @@ int main() {
 }
 `;
 
-const tokens = new Lexer(sourceCode2).scanTokens();
+const sourceCode3 = `
+
+  int main() {
+    int w = 1 * (2 + 3);
+    int x = w + (0 * 999);
+    int y = x - 0;
+    int z = y / 1;
+    if (z == 5) {
+      printf(z * 1 + 0);
+    }
+    return 0;
+  }
+`;
+
+const sourceCode4 = `
+
+  int main()
+  {
+    int x = 3;
+    int y = x + 7;
+    int z = 2 * y;
+    if(x > y) {
+      z = x / 2 + y / 3;
+    } else
+    {
+      z = x * y + y;
+    }
+  }`;
+
+// int main()
+// {
+//   int x = 3;
+//   int y = 21
+//   int z // or maybe declare it further down I'm not sure
+//   if(3 < y) {
+//     z = 3 / 2 + y / 3;
+//   } else
+//   {
+//     z = 3 * y + y;
+//   }
+// }
+
+// int main()
+// {
+
+//   int z // or maybe declare it further down I'm not sure
+//   if(3 < 21) {
+//     z = 3 / 2 + y / 3;
+//   } else
+//   {
+//     z = 3 * y + y;
+//   }
+// }
+
+const tokens = new Lexer(sourceCode4).scanTokens();
 const ast = new Parser(tokens).parse();
-const optimizer = new BasicOptimizer();
+const optimizer = new IterativeOptimizer();
 
 const { optimized: optimizedAst, stats } = optimizer.optimize(ast);
 
