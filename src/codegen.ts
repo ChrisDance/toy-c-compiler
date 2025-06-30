@@ -103,6 +103,27 @@ export class ARM64CodeGenerator {
     }
   }
 
+  private calculateStackSizeForFunction(func: FunctionDeclaration): number {
+    // Base stack size for frame pointer and return address
+    const baseStackSize = 32;
+
+    // Space needed for parameters (each parameter needs 4 bytes, but align to 8)
+    const parameterSpace = Math.max(
+      32,
+      Math.ceil((func.params.length * 4) / 8) * 8,
+    );
+
+    // Space for local variables (estimate based on complexity)
+    const localVarSpace = 64;
+
+    // Space for temporary values during expression evaluation
+    const tempSpace = 32;
+
+    // Total must be 16-byte aligned
+    const total = baseStackSize + parameterSpace + localVarSpace + tempSpace;
+    return Math.ceil(total / 16) * 16;
+  }
+
   private generateFunction(func: FunctionDeclaration): void {
     this.currentFunction = func.name;
     this.varLocationMap.set(func.name, new Map());
@@ -121,7 +142,7 @@ export class ARM64CodeGenerator {
     this.addLine(`_${func.name}:\t\t\t\t\t\t ; @${func.name}`);
 
     if (isMain) {
-      /* main prologue */
+      /* main prologue - keep existing behavior */
       this.addLine("\tsub\tsp, sp, #48");
       this.addLine("\tstp\tx29, x30, [sp, #32]\t\t\t ; 16-byte Folded Spill");
       this.addLine("\tadd\tx29, sp, #32");
@@ -135,10 +156,8 @@ export class ARM64CodeGenerator {
       this.addLine("\tldp\tx29, x30, [sp, #32]\t\t\t ; 16-byte Folded Reload");
       this.addLine("\tadd\tsp, sp, #48");
     } else {
-      // Calculate stack size needed (must be 16-byte aligned)
-      const baseStackSize = 32; // For x29, x30 storage
-      const maxVarSpace = 64; // Additional space for local variables
-      const totalStackSize = baseStackSize + maxVarSpace;
+      // Calculate stack size needed based on function parameters and complexity
+      const totalStackSize = this.calculateStackSizeForFunction(func);
 
       // Non-main function prologue
       this.addLine(`\tsub\tsp, sp, #${totalStackSize}`);
@@ -151,7 +170,16 @@ export class ARM64CodeGenerator {
         const offset = this.allocateStackSlot(func.name, false);
 
         this.setVarLocation(func.name, param.name, false, offset);
-        this.addLine(`\tstr\tw${i}, [sp, #${offset}]`);
+
+        // ARM64 calling convention: first 8 parameters come in w0-w7
+        if (i < 8) {
+          this.addLine(`\tstr\tw${i}, [sp, #${offset}]`);
+        } else {
+          // Parameters beyond w7 would be passed on stack by caller
+          throw new Error(
+            `Function ${func.name} has more than 8 parameters, which is not supported`,
+          );
+        }
       }
 
       this.generateBlock(func.body);
@@ -243,16 +271,25 @@ export class ARM64CodeGenerator {
   }
 
   private allocateStackSlot(funcName: string, frameRelative: boolean): number {
-    const currentOffset = this.nextOffsetMap.get(funcName) || 0;
+    if (!this.nextOffsetMap.has(funcName)) {
+      // Initialize based on function type
+      if (funcName === "main") {
+        this.nextOffsetMap.set(funcName, frameRelative ? -4 : 8);
+      } else {
+        // Start further down to account for parameters
+        this.nextOffsetMap.set(funcName, frameRelative ? -4 : 16);
+      }
+    }
 
-    /* update the next available offset
-     for frame-relative offsets (in main), we go more negative
-     for stack-relative offsets, we increase*/
-    const newOffset = frameRelative
-      ? currentOffset - 4 /* move 4 bytes down in frame-relative addressing*/
-      : currentOffset + 4; /* move 4 bytes up in stack-relative addressing*/
+    const currentOffset = this.nextOffsetMap.get(funcName)!;
 
-    this.nextOffsetMap.set(funcName, newOffset);
+    if (frameRelative) {
+      // Frame-relative (main function variables) - grow downward
+      this.nextOffsetMap.set(funcName, currentOffset - 4);
+    } else {
+      // Stack-relative (non-main function variables) - grow upward
+      this.nextOffsetMap.set(funcName, currentOffset + 4);
+    }
 
     return currentOffset;
   }
@@ -389,21 +426,67 @@ export class ARM64CodeGenerator {
 
     const result: string[] = [];
 
-    // For educational compiler - only support single parameter
-    if (expr.arguments.length > 1) {
+    // ARM64 calling convention: first 8 integer arguments go in w0-w7
+    // Arguments beyond 8 would go on stack (we'll throw error for > 8)
+    if (expr.arguments.length > 8) {
       throw new Error(
-        "Multiple function arguments not supported in this educational compiler",
+        "More than 8 function arguments not supported in this educational compiler",
       );
     }
 
+    // Handle the case where we have multiple arguments
+    // We need to evaluate them carefully to avoid register conflicts
+
+    if (expr.arguments.length === 0) {
+      // No arguments, just call
+      result.push(`\tbl\t_${expr.callee}`);
+      return result;
+    }
+
     if (expr.arguments.length === 1) {
-      // Generate the single argument expression
+      // Single argument - existing behavior
       const argCode = this.generateExpression(expr.arguments[0]);
       result.push(...argCode);
       // Argument is now in w0, which is where ARM64 expects first parameter
+      result.push(`\tbl\t_${expr.callee}`);
+      return result;
     }
 
-    // Call the function
+    // Multiple arguments - need to handle register allocation carefully
+    // Strategy: evaluate all arguments and store them in temporary stack locations,
+    // then move them to the correct registers just before the call
+
+    const tempStackOffsets: number[] = [];
+
+    // Step 1: Evaluate each argument and store on stack
+    for (let i = 0; i < expr.arguments.length; i++) {
+      const argCode = this.generateExpression(expr.arguments[i]);
+      result.push(...argCode);
+
+      // Allocate temporary stack space for this argument
+      const tempOffset = this.allocateStackSlot(this.currentFunction, false);
+      tempStackOffsets.push(tempOffset);
+
+      // Store the result (in w0) to temporary stack location
+      if (this.currentFunction === "main") {
+        result.push(`\tstur\tw0, [x29, #${tempOffset}]`);
+      } else {
+        result.push(`\tstr\tw0, [sp, #${tempOffset}]`);
+      }
+    }
+
+    // Step 2: Load arguments from stack into correct parameter registers
+    for (let i = 0; i < expr.arguments.length; i++) {
+      const tempOffset = tempStackOffsets[i];
+
+      if (this.currentFunction === "main") {
+        result.push(`\tldur\tw${i}, [x29, #${tempOffset}]`);
+      } else {
+        result.push(`\tldr\tw${i}, [sp, #${tempOffset}]`);
+      }
+    }
+
+    // Step 3: Make the function call
     result.push(`\tbl\t_${expr.callee}`);
 
     return result;

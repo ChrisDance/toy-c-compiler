@@ -4,7 +4,7 @@ export const code_samples: CodeSample[] = [
   //  NOT WORKING
   {
     code: `int main() {
-    int result = 0;
+    int result = 5;
     if (1 == 1) {
       result = 100;
     } else {
@@ -60,6 +60,24 @@ export const code_samples: CodeSample[] = [
 ];
 
 export const working = [
+  // code_samples[0],
+  // Test for multiple args
+  {
+    code: `
+
+    int func(int a, int b) {
+       return a + b;
+    }
+
+    int main() {
+
+    printf(func(5, 5)) ;
+    return 0;
+    }
+
+    `,
+    output: 10,
+  },
   // Test case for recursion:
   {
     code: `int recurse(int n) {

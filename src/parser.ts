@@ -168,23 +168,22 @@ export class Parser {
 
     const params: Parameter[] = [];
     if (!this.check(TokenType.RIGHT_PAREN)) {
-      //   do {
+      do {
+        this.consume(TokenType.INT, "Expect parameter type.");
 
-      this.consume(TokenType.INT, "Expect parameter type.");
+        const paramName = this.consume(
+          TokenType.IDENTIFIER,
+          "Expect parameter name.",
+        );
 
-      const paramName = this.consume(
-        TokenType.IDENTIFIER,
-        "Expect parameter name.",
-      );
+        params.push({
+          type: NodeType.Parameter,
+          name: paramName.lexeme,
+          paramType: "int" /** only support ints's */,
+        });
 
-      params.push({
-        type: NodeType.Parameter,
-        name: paramName.lexeme,
-        paramType: "int" /** only support ints's */,
-      });
-
-      /** for multiple args */
-      //   } while (this.match(TokenType.COMMA));
+        /** for multiple args */
+      } while (this.match(TokenType.COMMA));
     }
 
     this.consume(TokenType.RIGHT_PAREN, "Expect ')' after parameters.");
@@ -401,9 +400,9 @@ export class Parser {
 
         if (!this.check(TokenType.RIGHT_PAREN)) {
           /** if we want multiple args */
-          //   do {
-          args.push(this.parseExpression());
-          //   } while (this.match(TokenType.COMMA));
+          do {
+            args.push(this.parseExpression());
+          } while (this.match(TokenType.COMMA));
         }
 
         this.consume(TokenType.RIGHT_PAREN, "Expect ')' after arguments.");

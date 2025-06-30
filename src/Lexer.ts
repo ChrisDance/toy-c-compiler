@@ -22,6 +22,7 @@ export enum TokenType {
   LEFT_BRACE = "LEFT_BRACE",
   RIGHT_BRACE = "RIGHT_BRACE",
   SEMICOLON = "SEMICOLON",
+  COMMA = "COMMA",
 
   EOF = "EOF",
 }
@@ -69,6 +70,9 @@ export class Lexer {
         break;
       case ")":
         this.addToken(TokenType.RIGHT_PAREN);
+        break;
+      case ",":
+        this.addToken(TokenType.COMMA);
         break;
       case "{":
         this.addToken(TokenType.LEFT_BRACE);

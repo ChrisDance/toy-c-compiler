@@ -197,12 +197,7 @@ export class IterativeOptimizer {
       calledFunctions.add(currentFunction.name);
       console.log(`Processing function: ${currentFunction.name}`);
 
-      // Apply optimizations to this function
       this.functionPass = true;
-      this.cpFunction(currentFunction);
-      this.cfFunction(currentFunction);
-      this.dceFunction(currentFunction);
-
       // Find any function calls in this function and add to queue
       this.findFunctionCalls(currentFunction).forEach((funcName) => {
         const calledFunc = currentProgram.functions.find(

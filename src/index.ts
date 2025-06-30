@@ -5,6 +5,12 @@ import { Lexer } from "./Lexer";
 import { IterativeOptimizer } from "./optimiser";
 import { Parser } from "./parser";
 let i = 1;
+// working.unshift(
+// 
+
+// 
+// 
+// );
 for (const prog of working) {
   const tokens = new Lexer(prog.code).scanTokens();
   const ast = new Parser(tokens).parse();
