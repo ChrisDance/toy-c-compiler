@@ -47,6 +47,25 @@ export class ARM64CodeGenerator {
         "bl _printf",
       ];
     },
+    exit: (args: Expression[]) => {
+      const result: string[] = [];
+
+      if (args.length !== 1) {
+        throw new Error("exit() requires exactly one argument (exit code)");
+      }
+
+      // Generate code to evaluate the exit code argument
+      const exitCodeExpression = this.generateExpression(args[0]);
+      result.push(...exitCodeExpression);
+
+      // ARM64 macOS system call for exit:
+      // System call number 1 (exit) goes in x16
+      // Exit code (from our expression) is already in w0/x0
+      result.push("\tmov\tx16, #1"); // System call number for exit
+      result.push("\tsvc\t#0x80"); // Supervisor call (invoke system call)
+
+      return result;
+    },
   };
 
   generate(ast: Program): string {

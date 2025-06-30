@@ -7,27 +7,38 @@ _main:						 ; @main
 	sub	sp, sp, #48
 	stp	x29, x30, [sp, #32]			 ; 16-byte Folded Spill
 	add	x29, sp, #32
-	mov	w8, #10				; =0xa
-	stur	w8, [x29, #-4]
-	ldur	w0, [x29, #-4]
-	mov	w8, w0
 	mov	w0, #5				; =0x5
-	mov	w9, w0
-	add	w0, w8, w9
-	stur	w0, [x29, #-4]
-	mov	w0, #0				; =0x0
 	mov	w8, w0
-	ldur	w0, [x29, #-4]
+	mov	w0, #10				; =0xa
 	mov	w9, w0
-	add	w0, w8, w9
-	stur	w0, [x29, #-4]
-	ldur	w0, [x29, #-4]
+	cmp	w8, w9
+	cset	w0, gt
+	cmp	w0, #0
+	beq	L1_endif
+	mov	w0, #999				; =0x3e7
 mov x9, sp
 mov x8, x0
 str x8, [x9]
 adrp x0, l_.str.0@PAGE
 add x0, x0, l_.str.0@PAGEOFF
 bl _printf
+L1_endif:
+	mov	w0, #0				; =0x0
+	mov	w8, w0
+	mov	w0, #0				; =0x0
+	mov	w9, w0
+	cmp	w8, w9
+	cset	w0, eq
+	cmp	w0, #0
+	beq	L2_endif
+	mov	w0, #42				; =0x2a
+mov x9, sp
+mov x8, x0
+str x8, [x9]
+adrp x0, l_.str.1@PAGE
+add x0, x0, l_.str.1@PAGEOFF
+bl _printf
+L2_endif:
 	mov	w0, #0				; =0x0
 	b	L0_function_end
 L0_function_end:
@@ -38,5 +49,7 @@ L0_function_end:
 
 	.section	__TEXT,__cstring,cstring_literals
 l_.str.0:
+	.asciz	"%d\n"
+l_.str.1:
 	.asciz	"%d\n"
 .subsections_via_symbols

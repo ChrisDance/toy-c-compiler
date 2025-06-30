@@ -61,6 +61,20 @@ export const code_samples: CodeSample[] = [
 
 export const working = [
   // code_samples[0],
+  //
+  // Test exit
+  {
+    code: `
+      int main()
+      {
+        exit(0);
+        printf(2);
+        return 0;
+      }
+
+   `,
+    output: "",
+  },
   // Test for multiple args
   {
     code: `
