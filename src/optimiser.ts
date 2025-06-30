@@ -344,7 +344,7 @@ export class IterativeOptimizer {
       case NodeType.AssignmentStatement:
         const assignment = stmt as AssignmentStatement;
         if (
-          !this.usedVariables.has(assignment.target) &&
+          !this.usedVariables.has(assignment.target as any) &&
           !this.hasSideEffects(assignment.value)
         ) {
           this.currentPassStats.deadCodeElimination++;
@@ -469,11 +469,11 @@ export class IterativeOptimizer {
 
         // Track constant values
         if (value.type === NodeType.NumberLiteral) {
-          this.constantValues[assignment.target] = (
+          this.constantValues[assignment.target as any] = (
             value as NumberLiteral
           ).value;
         } else {
-          delete this.constantValues[assignment.target];
+          delete this.constantValues[assignment.target as any];
         }
 
         return {
@@ -1047,7 +1047,7 @@ export class IterativeOptimizer {
       switch (node.type) {
         case NodeType.AssignmentStatement:
           const assignment = node as AssignmentStatement;
-          modified.add(assignment.target);
+          modified.add(assignment.target as any);
           traverse(assignment.value);
           break;
 

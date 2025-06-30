@@ -13,6 +13,7 @@ export enum NodeType {
   WhileStatement = "WhileStatement",
   FunctionCall = "FunctionCall",
   BinaryExpression = "BinaryExpression",
+  UnaryExpression = "UnaryExpression", // New: for address-of (&) and dereference (*)
   Identifier = "Identifier",
   NumberLiteral = "NumberLiteral",
   VoidExpression = "VoidExpression",
@@ -24,7 +25,7 @@ export interface Node {
 
 export interface AssignmentStatement extends Node {
   type: NodeType.AssignmentStatement;
-  target: string; // Variable name being assigned to
+  target: string | UnaryExpression; // Variable name or dereferenced pointer (*ptr)
   value: Expression;
 }
 
@@ -44,7 +45,7 @@ export interface FunctionDeclaration extends Node {
 export interface Parameter extends Node {
   type: NodeType.Parameter;
   name: string;
-  paramType: string;
+  paramType: string; // Now supports "int" and "int*"
 }
 
 export interface WhileStatement extends Node {
@@ -59,6 +60,7 @@ export interface BlockStatement extends Node {
 }
 
 export type Statement =
+  | any
   | ReturnStatement
   | VariableDeclaration
   | ExpressionStatement
@@ -75,7 +77,7 @@ export interface ReturnStatement extends Node {
 export interface VariableDeclaration extends Node {
   type: NodeType.VariableDeclaration;
   name: string;
-  varType: string;
+  varType: string; // Now supports "int" and "int*"
   init: Expression;
 }
 
@@ -93,6 +95,7 @@ export interface IfStatement extends Node {
 
 export type Expression =
   | BinaryExpression
+  | UnaryExpression
   | VoidExpression
   | FunctionCall
   | Identifier
@@ -103,6 +106,13 @@ export interface BinaryExpression extends Node {
   operator: string;
   left: Expression;
   right: Expression;
+}
+
+// New: UnaryExpression for address-of (&) and dereference (*) operations
+export interface UnaryExpression extends Node {
+  type: NodeType.UnaryExpression;
+  operator: string; // "&" for address-of, "*" for dereference
+  operand: Expression;
 }
 
 export interface VoidExpression extends Node {
@@ -125,7 +135,7 @@ export interface NumberLiteral extends Node {
   value: number;
 }
 
-/** Because we only support a single type: int, we can make a lot of assumptions in our parsing */
+/** Enhanced parser supporting int pointers while maintaining simplicity */
 
 export class Parser {
   private tokens: Token[];
@@ -136,11 +146,15 @@ export class Parser {
   }
 
   parse(): Program {
+    if (this.tokens.length <= 1) {
+      throw new Error("Cannot parse empty program");
+    }
+
     const functions: FunctionDeclaration[] = [];
 
     while (!this.isAtEnd()) {
       const func = this.parseFunction();
-      this.validateFunction(func); // Add validation
+      this.validateFunction(func);
       functions.push(func);
     }
 
@@ -165,15 +179,18 @@ export class Parser {
   }
 
   private parseFunction(): FunctionDeclaration {
-    // Parse return type (int or void)
+    // Parse return type (int, int*, or void)
     let returnType: string;
     if (this.match(TokenType.INT)) {
       returnType = "int";
+      // Check for pointer type
+      if (this.match(TokenType.MULTIPLY)) {
+        returnType = "int*";
+      }
     } else if (this.match(TokenType.VOID)) {
-      // Add void support
       returnType = "void";
     } else {
-      throw this.error(this.peek(), "Expect return type (int or void).");
+      throw this.error(this.peek(), "Expect return type (int, int*, or void).");
     }
 
     const nameToken = this.consume(
@@ -188,6 +205,12 @@ export class Parser {
       do {
         this.consume(TokenType.INT, "Expect parameter type.");
 
+        let paramType = "int";
+        // Check for pointer parameter
+        if (this.match(TokenType.MULTIPLY)) {
+          paramType = "int*";
+        }
+
         const paramName = this.consume(
           TokenType.IDENTIFIER,
           "Expect parameter name.",
@@ -196,7 +219,7 @@ export class Parser {
         params.push({
           type: NodeType.Parameter,
           name: paramName.lexeme,
-          paramType: "int",
+          paramType,
         });
       } while (this.match(TokenType.COMMA));
     }
@@ -209,7 +232,7 @@ export class Parser {
       type: NodeType.FunctionDeclaration,
       name: nameToken.lexeme,
       params,
-      returnType, // Use the parsed return type instead of hard-coded "int"
+      returnType,
       body,
     };
   }
@@ -251,22 +274,44 @@ export class Parser {
       return this.parseBlock();
     }
 
-    if (this.check(TokenType.IDENTIFIER)) {
+    // Handle assignment statements including pointer dereferencing
+    if (this.check(TokenType.IDENTIFIER) || this.check(TokenType.MULTIPLY)) {
       const checkpoint = this.current;
-      const identifier = this.advance();
 
-      if (this.match(TokenType.EQUAL)) {
-        // It's an assignment
-        const value = this.parseExpression();
-        this.consume(TokenType.SEMICOLON, "Expect ';' after assignment.");
+      try {
+        // Try to parse as assignment
+        let target: string | UnaryExpression;
 
-        return {
-          type: NodeType.AssignmentStatement,
-          target: identifier.lexeme,
-          value,
-        };
-      } else {
-        // Not an assignment, backtrack and parse as expression
+        if (this.match(TokenType.MULTIPLY)) {
+          // Dereference assignment: *ptr = value
+          const operand = this.parsePrimary();
+          target = {
+            type: NodeType.UnaryExpression,
+            operator: "*",
+            operand,
+          };
+        } else {
+          // Regular variable assignment
+          const identifier = this.advance();
+          target = identifier.lexeme;
+        }
+
+        if (this.match(TokenType.EQUAL)) {
+          const value = this.parseExpression();
+          this.consume(TokenType.SEMICOLON, "Expect ';' after assignment.");
+
+          return {
+            type: NodeType.AssignmentStatement,
+            target,
+            value,
+          };
+        } else {
+          // Not an assignment, backtrack and parse as expression
+          this.current = checkpoint;
+          return this.parseExpressionStatement();
+        }
+      } catch (error) {
+        // If parsing as assignment fails, backtrack and try as expression
         this.current = checkpoint;
         return this.parseExpressionStatement();
       }
@@ -315,6 +360,13 @@ export class Parser {
 
   private parseVariableDeclaration(): VariableDeclaration {
     /* INT token was already consumed in parseStatement */
+    let varType = "int";
+
+    // Check for pointer type
+    if (this.match(TokenType.MULTIPLY)) {
+      varType = "int*";
+    }
+
     const name = this.consume(
       TokenType.IDENTIFIER,
       "Expect variable name.",
@@ -329,7 +381,7 @@ export class Parser {
     return {
       type: NodeType.VariableDeclaration,
       name,
-      varType: "int",
+      varType,
       init: initializer,
     };
   }
@@ -389,11 +441,11 @@ export class Parser {
   }
 
   private parseTerm(): Expression {
-    let expr = this.parsePrimary();
+    let expr = this.parseUnary();
 
     while (this.match(TokenType.MULTIPLY, TokenType.DIVIDE)) {
       const operator = this.previous().lexeme;
-      const right = this.parsePrimary();
+      const right = this.parseUnary();
       expr = {
         type: NodeType.BinaryExpression,
         operator,
@@ -403,6 +455,33 @@ export class Parser {
     }
 
     return expr;
+  }
+
+  // New: Parse unary expressions (address-of and dereference)
+  private parseUnary(): Expression {
+    if (this.match(TokenType.AMPERSAND)) {
+      // Address-of operator: &variable
+      const operator = this.previous().lexeme;
+      const operand = this.parseUnary();
+      return {
+        type: NodeType.UnaryExpression,
+        operator,
+        operand,
+      };
+    }
+
+    if (this.match(TokenType.MULTIPLY)) {
+      // Dereference operator: *pointer
+      const operator = this.previous().lexeme;
+      const operand = this.parseUnary();
+      return {
+        type: NodeType.UnaryExpression,
+        operator,
+        operand,
+      };
+    }
+
+    return this.parsePrimary();
   }
 
   private parsePrimary(): Expression {
@@ -492,8 +571,8 @@ export class Parser {
   private error(token: Token, message: string): Error {
     const errorMsg =
       token.type === TokenType.EOF
-        ? `Line ${token.line}: Error at end: ${message}`
-        : `Line ${token.line}: Error at '${token.lexeme}': ${message}`;
+        ? `Error at end: ${message}`
+        : `Error at token '${token.lexeme}' on line ${token.line}: ${message}`;
     return new Error(errorMsg);
   }
 
