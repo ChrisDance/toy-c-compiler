@@ -1,0 +1,24 @@
+{
+  "languages": {
+    "TypeScript": {
+      "code_actions_on_format": {
+        "source.organizeImports": true
+      },
+      "format_on_save": "on"
+    }
+  },
+  "lsp": {
+    "typescript-language-server": {
+      "initialization_options": {
+        "preferences": {
+          "useAliasesForRenames": false,
+          "includeCompletionsForModuleExports": true
+        }
+      }
+    }
+  },
+  "file_scan_exclusions": ["**/dist", "**/coverage", "**/*.log"],
+  "terminal": {
+    "working_directory": "current_project_directory"
+  }
+}

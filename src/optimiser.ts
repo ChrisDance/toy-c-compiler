@@ -1,20 +1,20 @@
 // src/optimizer.ts
 import {
-  Program,
-  FunctionDeclaration,
-  Statement,
-  Expression,
-  BinaryExpression,
-  NumberLiteral,
-  NodeType,
-  BlockStatement,
-  VariableDeclaration,
-  ReturnStatement,
-  IfStatement,
-  Identifier,
   AssignmentStatement,
-  WhileStatement,
+  BinaryExpression,
+  BlockStatement,
+  Expression,
   FunctionCall,
+  FunctionDeclaration,
+  Identifier,
+  IfStatement,
+  NodeType,
+  NumberLiteral,
+  Program,
+  ReturnStatement,
+  Statement,
+  VariableDeclaration,
+  WhileStatement,
 } from "./parser";
 
 export interface OptimizationStats {
@@ -372,32 +372,6 @@ export class BasicOptimizer {
 
       case NodeType.FunctionCall:
         return false; // Never remove function calls - they might have side effects
-
-      default:
-        return false;
-    }
-  }
-
-  private hasNoSideEffects(expr: Expression): boolean {
-    // This is much more conservative than isTrivialExpression
-    // Real compilers need extensive analysis to determine side effects
-    switch (expr.type) {
-      case NodeType.NumberLiteral:
-      case NodeType.Identifier:
-        return true;
-
-      case NodeType.BinaryExpression:
-        return (
-          this.hasNoSideEffects(expr.left) && this.hasNoSideEffects(expr.right)
-        );
-
-      case NodeType.FunctionCall:
-        // In a real compiler, you'd need:
-        // - Function purity analysis
-        // - Escape analysis
-        // - Inter-procedural analysis
-        // For now, assume all function calls have side effects
-        return false;
 
       default:
         return false;

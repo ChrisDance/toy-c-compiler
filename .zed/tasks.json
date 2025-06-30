@@ -1,0 +1,32 @@
+[
+  {
+    "label": "Run Compiler",
+    "command": "npm",
+    "args": ["start"]
+  },
+  {
+    "label": "Dev Watch",
+    "command": "npm",
+    "args": ["run", "dev"]
+  },
+  {
+    "label": "Debug Compiler (Breakpoint)",
+    "command": "npm",
+    "args": ["run", "debug"]
+  },
+  {
+    "label": "Debug Compiler (Attach)",
+    "command": "npm",
+    "args": ["run", "debug:attach"]
+  },
+  {
+    "label": "Test All",
+    "command": "npm",
+    "args": ["test"]
+  },
+  {
+    "label": "Debug Tests",
+    "command": "npm",
+    "args": ["run", "test:debug"]
+  }
+]
