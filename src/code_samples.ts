@@ -4,6 +4,22 @@ export const code_samples: CodeSample[] = [];
 export const working = [
   {
     code: `
+
+ int main()
+ {
+  int i = 7;
+  int k = &i;
+  printf(*k);
+  return 0;
+ }
+
+
+ `,
+    output: 7,
+  },
+
+  {
+    code: `
     void printNumber() {
          printf(42);
          return;

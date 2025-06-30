@@ -11,19 +11,20 @@ import {
   Program,
   ReturnStatement,
   Statement,
+  UnaryExpression,
   WhileStatement,
 } from "./parser";
 
 class RegisterAllocator {
   private availableRegs = [
-    "w8",
-    "w9",
-    "w10",
-    "w11",
-    "w12",
-    "w13",
-    "w14",
-    "w15",
+    "x8", // Changed to 64-bit registers
+    "x9",
+    "x10",
+    "x11",
+    "x12",
+    "x13",
+    "x14",
+    "x15",
   ];
   private usedRegs: string[] = [];
 
@@ -46,7 +47,7 @@ class RegisterAllocator {
 
   // Reset for each function
   reset(): void {
-    this.availableRegs = ["w8", "w9", "w10", "w11", "w12", "w13", "w14", "w15"];
+    this.availableRegs = ["x8", "x9", "x10", "x11", "x12", "x13", "x14", "x15"];
     this.usedRegs = [];
   }
 
@@ -77,7 +78,7 @@ export class ARM64CodeGenerator {
    */
   private specialFunctions: Record<string, (args: Expression[]) => string[]> = {
     printf: (args: Expression[]) => {
-      const formatString = "%d\\n";
+      const formatString = "%ld\\n"; // Changed to %ld for 64-bit
       const label = this.addStringLiteral(formatString);
       const argCode = this.generateExpression(args[0]);
 
@@ -104,7 +105,7 @@ export class ARM64CodeGenerator {
 
       // ARM64 macOS system call for exit:
       // System call number 1 (exit) goes in x16
-      // Exit code (from our expression) is already in w0/x0
+      // Exit code (from our expression) is already in x0
       result.push("\tmov\tx16, #1"); // System call number for exit
       result.push("\tsvc\t#0x80"); // Supervisor call (invoke system call)
 
@@ -143,26 +144,45 @@ export class ARM64CodeGenerator {
   }
 
   private generateAssignmentStatement(stmt: any): void {
-    // Generate the value expression
+    // Generate the value expression first
     const valueCode = this.generateExpression(stmt.value);
     this.addLines(valueCode);
 
-    // Get the variable location
-    const varLocation = this.getVarLocation(this.currentFunction, stmt.target);
-
-    if (!varLocation) {
-      throw new Error(
-        `Variable not found: ${stmt.target} in function ${this.currentFunction}`,
+    if (typeof stmt.target === "string") {
+      // Regular variable assignment
+      const varLocation = this.getVarLocation(
+        this.currentFunction,
+        stmt.target,
       );
-    }
+      if (!varLocation) {
+        throw new Error(
+          `Variable not found: ${stmt.target} in function ${this.currentFunction}`,
+        );
+      }
 
-    const { frameRelative, offset } = varLocation;
+      const { frameRelative, offset } = varLocation;
+      // Store the result (now using 64-bit stores)
+      if (frameRelative) {
+        this.addLine(`\tstr\tx0, [x29, #${offset}]`); // Changed to x0 and str
+      } else {
+        this.addLine(`\tstr\tx0, [sp, #${offset}]`); // Changed to x0 and str
+      }
+    } else if (
+      stmt.target.type === "UnaryExpression" &&
+      stmt.target.operator === "*"
+    ) {
+      // Assignment to dereferenced pointer: *ptr = value
+      // Value is already in x0, save it temporarily
+      this.addLine(`\tmov\tx8, x0`);
 
-    // Store the result
-    if (frameRelative) {
-      this.addLine(`\tstur\tw0, [x29, #${offset}]`);
+      // Generate code to get the pointer address
+      const ptrCode = this.generateExpression(stmt.target.operand);
+      this.addLines(ptrCode);
+
+      // Store the value at the address pointed to by the pointer
+      this.addLine(`\tstr\tx8, [x0]`); // Store 64-bit value at address in x0
     } else {
-      this.addLine(`\tstr\tw0, [sp, #${offset}]`);
+      throw new Error("Invalid assignment target");
     }
   }
 
@@ -170,10 +190,10 @@ export class ARM64CodeGenerator {
     // Base stack size for frame pointer and return address
     const baseStackSize = 32;
 
-    // Space needed for parameters (each parameter needs 4 bytes, but align to 8)
+    // Space needed for parameters (each parameter needs 8 bytes now, align to 8)
     const parameterSpace = Math.max(
       32,
-      Math.ceil((func.params.length * 4) / 8) * 8,
+      Math.ceil((func.params.length * 8) / 8) * 8, // Changed to 8 bytes per param
     );
 
     // Space for local variables (estimate based on complexity)
@@ -197,7 +217,7 @@ export class ARM64CodeGenerator {
     this.regAlloc.reset();
 
     const isMain = func.name === "main";
-    this.nextOffsetMap.set(func.name, isMain ? -4 : 16);
+    this.nextOffsetMap.set(func.name, isMain ? -8 : 16); // Changed to 8-byte alignment
 
     this.addLine("");
     this.addLine(
@@ -236,11 +256,11 @@ export class ARM64CodeGenerator {
 
         this.setVarLocation(func.name, param.name, false, offset);
 
-        // ARM64 calling convention: first 8 parameters come in w0-w7
+        // ARM64 calling convention: first 8 parameters come in x0-x7 (changed to 64-bit)
         if (i < 8) {
-          this.addLine(`\tstr\tw${i}, [sp, #${offset}]`);
+          this.addLine(`\tstr\tx${i}, [sp, #${offset}]`); // Changed to x registers
         } else {
-          // Parameters beyond w7 would be passed on stack by caller
+          // Parameters beyond x7 would be passed on stack by caller
           throw new Error(
             `Function ${func.name} has more than 8 parameters, which is not supported`,
           );
@@ -272,9 +292,9 @@ export class ARM64CodeGenerator {
     if (stmt.type == NodeType.ReturnStatement) {
       const exprCode = this.generateExpression(stmt.argument);
       this.addLines(exprCode);
-      // Result is now in w0, which is the return register
+      // Result is now in x0, which is the return register
     }
-    // For void functions, we don't set w0
+    // For void functions, we don't set x0
 
     // Jump to function end for cleanup
     this.addLine(`\tb\t${this.functionEndLabel}`);
@@ -299,15 +319,13 @@ export class ARM64CodeGenerator {
 
           if (stmt.init.type === "NumberLiteral") {
             this.addLine(
-              `\tmov\tw8, #${
-                stmt.init.value
-              }\t\t\t\t; =0x${stmt.init.value.toString(16)}`,
+              `\tmov\tx8, #${stmt.init.value}\t\t\t\t; =0x${stmt.init.value.toString(16)}`, // Changed to x8
             );
-            this.addLine(`\tstur\tw8, [x29, #${offset}]`);
+            this.addLine(`\tstr\tx8, [x29, #${offset}]`); // Changed to str and x8
           } else {
             const initCode = this.generateExpression(stmt.init);
             this.addLines(initCode);
-            this.addLine(`\tstur\tw0, [x29, #${offset}]`);
+            this.addLine(`\tstr\tx0, [x29, #${offset}]`); // Changed to str and x0
           }
         } else {
           const offset = this.allocateStackSlot(this.currentFunction, false);
@@ -315,15 +333,13 @@ export class ARM64CodeGenerator {
 
           if (stmt.init.type === "NumberLiteral") {
             this.addLine(
-              `\tmov\tw8, #${
-                stmt.init.value
-              }\t\t\t\t; =0x${stmt.init.value.toString(16)}`,
+              `\tmov\tx8, #${stmt.init.value}\t\t\t\t; =0x${stmt.init.value.toString(16)}`, // Changed to x8
             );
-            this.addLine(`\tstr\tw8, [sp, #${offset}]`);
+            this.addLine(`\tstr\tx8, [sp, #${offset}]`); // Changed to str and x8
           } else {
             const initCode = this.generateExpression(stmt.init);
             this.addLines(initCode);
-            this.addLine(`\tstr\tw0, [sp, #${offset}]`);
+            this.addLine(`\tstr\tx0, [sp, #${offset}]`); // Changed to str and x0
           }
         }
         break;
@@ -349,10 +365,10 @@ export class ARM64CodeGenerator {
     if (!this.nextOffsetMap.has(funcName)) {
       // Initialize based on function type
       if (funcName === "main") {
-        this.nextOffsetMap.set(funcName, frameRelative ? -4 : 8);
+        this.nextOffsetMap.set(funcName, frameRelative ? -8 : 8); // Changed to 8-byte alignment
       } else {
         // Start further down to account for parameters
-        this.nextOffsetMap.set(funcName, frameRelative ? -4 : 16);
+        this.nextOffsetMap.set(funcName, frameRelative ? -8 : 16); // Changed to 8-byte alignment
       }
     }
 
@@ -360,10 +376,10 @@ export class ARM64CodeGenerator {
 
     if (frameRelative) {
       // Frame-relative (main function variables) - grow downward
-      this.nextOffsetMap.set(funcName, currentOffset - 4);
+      this.nextOffsetMap.set(funcName, currentOffset - 8); // Changed to 8 bytes
     } else {
       // Stack-relative (non-main function variables) - grow upward
-      this.nextOffsetMap.set(funcName, currentOffset + 4);
+      this.nextOffsetMap.set(funcName, currentOffset + 8); // Changed to 8 bytes
     }
 
     return currentOffset;
@@ -381,7 +397,7 @@ export class ARM64CodeGenerator {
     this.addLines(conditionCode);
 
     // Jump to end if condition is false (0)
-    this.addLine("\tcmp\tw0, #0");
+    this.addLine("\tcmp\tx0, #0"); // Changed to x0
     this.addLine(`\tbeq\t${loopEnd}`);
 
     // Generate loop body
@@ -407,7 +423,7 @@ export class ARM64CodeGenerator {
     this.addLines(conditionCode);
 
     // Jump to else/end if condition is false
-    this.addLine("\tcmp\tw0, #0");
+    this.addLine("\tcmp\tx0, #0"); // Changed to x0
     this.addLine(`\tbeq\t${elseLabel}`);
 
     // Generate THEN branch
@@ -436,13 +452,12 @@ export class ARM64CodeGenerator {
     switch (expr.type) {
       case "BinaryExpression":
         return this.generateBinaryExpression(expr);
-
+      case "UnaryExpression": // Added support for UnaryExpression
+        return this.generateUnaryExpression(expr);
       case "FunctionCall":
         return this.generateFunctionCall(expr);
-
       case "Identifier":
         return this.generateIdentifier(expr);
-
       case "NumberLiteral":
         return this.generateNumberLiteral(expr);
       case "VoidExpression":
@@ -450,6 +465,51 @@ export class ARM64CodeGenerator {
       default:
         return [];
     }
+  }
+
+  // NEW: Generate unary expressions (address-of and dereference)
+  private generateUnaryExpression(expr: UnaryExpression): string[] {
+    const result: string[] = [];
+
+    switch (expr.operator) {
+      case "&": // Address-of operator
+        if (expr.operand.type === "Identifier") {
+          const varLocation = this.getVarLocation(
+            this.currentFunction,
+            expr.operand.name,
+          );
+          if (!varLocation) {
+            throw new Error(`Variable not found: ${expr.operand.name}`);
+          }
+
+          const { frameRelative, offset } = varLocation;
+          if (frameRelative) {
+            // Calculate address relative to frame pointer
+            result.push(`\tadd\tx0, x29, #${offset}`);
+          } else {
+            // Calculate address relative to stack pointer
+            result.push(`\tadd\tx0, sp, #${offset}`);
+          }
+        } else {
+          throw new Error(
+            "Address-of operator can only be applied to variables",
+          );
+        }
+        break;
+
+      case "*": // Dereference operator
+        // Load value from memory address
+        const addressCode = this.generateExpression(expr.operand);
+        result.push(...addressCode);
+        // x0 now contains the address, load the value from that address
+        result.push(`\tldr\tx0, [x0]`); // 64-bit load
+        break;
+
+      default:
+        throw new Error(`Unsupported unary operator: ${expr.operator}`);
+    }
+
+    return result;
   }
 
   private generateBinaryExpression(expr: BinaryExpression): string[] {
@@ -467,7 +527,7 @@ export class ARM64CodeGenerator {
 
     // Allocate register for left operand
     const leftReg = this.regAlloc.allocate();
-    result.push(`\tmov\t${leftReg}, w0`);
+    result.push(`\tmov\t${leftReg}, x0`); // Changed to x0
 
     // Generate right operand
     const rightCode = this.generateExpression(expr.right);
@@ -475,33 +535,33 @@ export class ARM64CodeGenerator {
 
     // Allocate register for right operand
     const rightReg = this.regAlloc.allocate();
-    result.push(`\tmov\t${rightReg}, w0`);
+    result.push(`\tmov\t${rightReg}, x0`); // Changed to x0
 
-    // Perform operation
+    // Perform operation (all using 64-bit x registers)
     switch (expr.operator) {
       case "*":
-        result.push(`\tmul\tw0, ${leftReg}, ${rightReg}`);
+        result.push(`\tmul\tx0, ${leftReg}, ${rightReg}`); // Changed to x0 and x registers
         break;
       case "+":
-        result.push(`\tadd\tw0, ${leftReg}, ${rightReg}`);
+        result.push(`\tadd\tx0, ${leftReg}, ${rightReg}`); // Changed to x0 and x registers
         break;
       case "-":
-        result.push(`\tsub\tw0, ${leftReg}, ${rightReg}`);
+        result.push(`\tsub\tx0, ${leftReg}, ${rightReg}`); // Changed to x0 and x registers
         break;
       case "/":
-        result.push(`\tsdiv\tw0, ${leftReg}, ${rightReg}`);
+        result.push(`\tsdiv\tx0, ${leftReg}, ${rightReg}`); // Changed to x0 and x registers
         break;
       case "<":
         result.push(`\tcmp\t${leftReg}, ${rightReg}`);
-        result.push("\tcset\tw0, lt");
+        result.push("\tcset\tx0, lt"); // Changed to x0
         break;
       case ">":
         result.push(`\tcmp\t${leftReg}, ${rightReg}`);
-        result.push("\tcset\tw0, gt");
+        result.push("\tcset\tx0, gt"); // Changed to x0
         break;
       case "==":
         result.push(`\tcmp\t${leftReg}, ${rightReg}`);
-        result.push("\tcset\tw0, eq");
+        result.push("\tcset\tx0, eq"); // Changed to x0
         break;
       default:
         throw new Error(`Unsupported binary operator: ${expr.operator}`);
@@ -514,7 +574,7 @@ export class ARM64CodeGenerator {
     return result;
   }
 
-  // STEP 5: Add this fallback method for very complex expressions
+  // Fallback method for very complex expressions
   private generateBinaryExpressionStackBased(expr: BinaryExpression): string[] {
     const result: string[] = [];
 
@@ -524,42 +584,42 @@ export class ARM64CodeGenerator {
 
     // Save to stack
     result.push("\tsub\tsp, sp, #16");
-    result.push("\tstr\tw0, [sp]");
+    result.push("\tstr\tx0, [sp]"); // Changed to x0 and str
 
     // Generate right operand
     const rightCode = this.generateExpression(expr.right);
     result.push(...rightCode);
-    result.push("\tmov\tw9, w0");
+    result.push("\tmov\tx9, x0"); // Changed to x9 and x0
 
     // Restore from stack
-    result.push("\tldr\tw8, [sp]");
+    result.push("\tldr\tx8, [sp]"); // Changed to x8 and ldr
     result.push("\tadd\tsp, sp, #16");
 
-    // Perform operation with w8 (left) and w9 (right)
+    // Perform operation with x8 (left) and x9 (right)
     switch (expr.operator) {
       case "*":
-        result.push("\tmul\tw0, w8, w9");
+        result.push("\tmul\tx0, x8, x9"); // Changed to x registers
         break;
       case "+":
-        result.push("\tadd\tw0, w8, w9");
+        result.push("\tadd\tx0, x8, x9"); // Changed to x registers
         break;
       case "-":
-        result.push("\tsub\tw0, w8, w9");
+        result.push("\tsub\tx0, x8, x9"); // Changed to x registers
         break;
       case "/":
-        result.push("\tsdiv\tw0, w8, w9");
+        result.push("\tsdiv\tx0, x8, x9"); // Changed to x registers
         break;
       case "<":
-        result.push("\tcmp\tw8, w9");
-        result.push("\tcset\tw0, lt");
+        result.push("\tcmp\tx8, x9"); // Changed to x registers
+        result.push("\tcset\tx0, lt"); // Changed to x0
         break;
       case ">":
-        result.push("\tcmp\tw8, w9");
-        result.push("\tcset\tw0, gt");
+        result.push("\tcmp\tx8, x9"); // Changed to x registers
+        result.push("\tcset\tx0, gt"); // Changed to x0
         break;
       case "==":
-        result.push("\tcmp\tw8, w9");
-        result.push("\tcset\tw0, eq");
+        result.push("\tcmp\tx8, x9"); // Changed to x registers
+        result.push("\tcset\tx0, eq"); // Changed to x0
         break;
       default:
         throw new Error(`Unsupported binary operator: ${expr.operator}`);
@@ -567,6 +627,7 @@ export class ARM64CodeGenerator {
 
     return result;
   }
+
   private generateFunctionCall(expr: FunctionCall): string[] {
     if (expr.callee in this.specialFunctions) {
       return this.specialFunctions[expr.callee](expr.arguments);
@@ -574,7 +635,7 @@ export class ARM64CodeGenerator {
 
     const result: string[] = [];
 
-    // ARM64 calling convention: first 8 integer arguments go in w0-w7
+    // ARM64 calling convention: first 8 integer arguments go in x0-x7 (changed to 64-bit)
     // Arguments beyond 8 would go on stack (we'll throw error for > 8)
     if (expr.arguments.length > 8) {
       throw new Error(
@@ -595,7 +656,7 @@ export class ARM64CodeGenerator {
       // Single argument - existing behavior
       const argCode = this.generateExpression(expr.arguments[0]);
       result.push(...argCode);
-      // Argument is now in w0, which is where ARM64 expects first parameter
+      // Argument is now in x0, which is where ARM64 expects first parameter
       result.push(`\tbl\t_${expr.callee}`);
       return result;
     }
@@ -615,11 +676,11 @@ export class ARM64CodeGenerator {
       const tempOffset = this.allocateStackSlot(this.currentFunction, false);
       tempStackOffsets.push(tempOffset);
 
-      // Store the result (in w0) to temporary stack location
+      // Store the result (in x0) to temporary stack location
       if (this.currentFunction === "main") {
-        result.push(`\tstur\tw0, [x29, #${tempOffset}]`);
+        result.push(`\tstr\tx0, [x29, #${tempOffset}]`); // Changed to str and x0
       } else {
-        result.push(`\tstr\tw0, [sp, #${tempOffset}]`);
+        result.push(`\tstr\tx0, [sp, #${tempOffset}]`); // Changed to str and x0
       }
     }
 
@@ -628,9 +689,9 @@ export class ARM64CodeGenerator {
       const tempOffset = tempStackOffsets[i];
 
       if (this.currentFunction === "main") {
-        result.push(`\tldur\tw${i}, [x29, #${tempOffset}]`);
+        result.push(`\tldr\tx${i}, [x29, #${tempOffset}]`); // Changed to ldr and x registers
       } else {
-        result.push(`\tldr\tw${i}, [sp, #${tempOffset}]`);
+        result.push(`\tldr\tx${i}, [sp, #${tempOffset}]`); // Changed to ldr and x registers
       }
     }
 
@@ -652,14 +713,14 @@ export class ARM64CodeGenerator {
     const { frameRelative, offset } = varLocation;
 
     if (frameRelative) {
-      return [`\tldur\tw0, [x29, #${offset}]`];
+      return [`\tldr\tx0, [x29, #${offset}]`]; // Changed to ldr and x0
     } else {
-      return [`\tldr\tw0, [sp, #${offset}]`];
+      return [`\tldr\tx0, [sp, #${offset}]`]; // Changed to ldr and x0
     }
   }
 
   private generateNumberLiteral(expr: NumberLiteral): string[] {
-    return [`\tmov\tw0, #${expr.value}\t\t\t\t; =0x${expr.value.toString(16)}`];
+    return [`\tmov\tx0, #${expr.value}\t\t\t\t; =0x${expr.value.toString(16)}`]; // Changed to x0
   }
 
   /* needs to be unique */

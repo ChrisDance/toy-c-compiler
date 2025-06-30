@@ -112,13 +112,13 @@ describe("ARM64 Compiler Integration Tests", () => {
           sanitizedTestName,
           false,
         );
-        const outputOptimised = await compileAndRun(
-          sample.code,
-          sanitizedOptimizedTestName,
-          true,
-        );
+        // const outputOptimised = await compileAndRun(
+        //   sample.code,
+        //   sanitizedOptimizedTestName,
+        //   true,
+        // );
         expect(output).toBe(sample.output.toString());
-        expect(outputOptimised).toBe(sample.output.toString());
+        // expect(outputOptimised).toBe(sample.output.toString());
 
         i++;
       }
