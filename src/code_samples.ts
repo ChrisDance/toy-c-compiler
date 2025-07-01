@@ -102,7 +102,8 @@ export const working = [
     output: 100,
   },
   {
-    code: `int main() {
+    code: `
+    int main() {
     int count = 10;
     int limit = 0;
     while (count > limit) {
