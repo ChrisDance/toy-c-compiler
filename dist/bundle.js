@@ -1,5 +1,5 @@
 "use strict";
-var MyLibrary = (() => {
+var Compiler = (() => {
   var __defProp = Object.defineProperty;
   var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
   var __getOwnPropNames = Object.getOwnPropertyNames;
@@ -2236,12 +2236,28 @@ Optimization completed after ${this.stats.passes} passes`);
 
   // src/index.ts
   var Compiler = class {
-    compile(source, optimise = true) {
+    static tokenize(source) {
       const tokens = new Lexer(source).scanTokens();
+      return tokens;
+    }
+    static parse(tokens) {
       const ast = new Parser(tokens).parse();
+      return ast;
+    }
+    static optimise(program) {
+      return new IterativeOptimizer().optimize(program).optimized;
+    }
+    static generate(program) {
       const generator = new ARM64CodeGenerator();
-      const asm = optimise ? generator.generate(new IterativeOptimizer().optimize(ast).optimized) : generator.generate(ast);
-      return asm;
+      return generator.generate(program);
+    }
+    static compile(source, optimise = true) {
+      const tokens = this.tokenize(source);
+      const ast = this.parse(tokens);
+      if (optimise) {
+        return this.generate(this.optimise(ast));
+      }
+      return this.generate(ast);
     }
   };
   return __toCommonJS(index_exports);
