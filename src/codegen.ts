@@ -273,7 +273,7 @@ export class ARM64CodeGenerator {
     /* Parameter storage - implements ARM64 calling convention */
     for (let i = 0; i < func.params.length; i++) {
       const param = func.params[i];
-      const offset = this.allocateStackSlot(func.name, false);
+      const offset = this.allocateStackSlot(func.name);
 
       this.setVarLocation(func.name, param.name, offset);
 
@@ -331,7 +331,7 @@ export class ARM64CodeGenerator {
         this.generateBlock(stmt);
         break;
       case "VariableDeclaration":
-        const offset = this.allocateStackSlot(this.currentFunction, false);
+        const offset = this.allocateStackSlot(this.currentFunction);
         this.setVarLocation(this.currentFunction, stmt.name, offset);
 
         if (stmt.init.type === "NumberLiteral") {
@@ -365,16 +365,9 @@ export class ARM64CodeGenerator {
   }
 
   /* Stack slot allocation - demonstrates memory layout management */
-  private allocateStackSlot(funcName: string, frameRelative: boolean): number {
+  private allocateStackSlot(funcName: string): number {
     const currentOffset = this.nextOffsetMap.get(funcName)!;
-
-    if (frameRelative) {
-      /* Frame-relative (main function) - negative offsets grow downward from frame pointer */
-      this.nextOffsetMap.set(funcName, currentOffset - 8);
-    } else {
-      /* Stack-relative (non-main) - positive offsets grow upward from stack pointer */
-      this.nextOffsetMap.set(funcName, currentOffset + 8);
-    }
+    this.nextOffsetMap.set(funcName, currentOffset + 8);
 
     return currentOffset;
   }
@@ -666,7 +659,7 @@ export class ARM64CodeGenerator {
       result.push(...argCode);
 
       /* Temporary stack allocation for argument preservation */
-      const tempOffset = this.allocateStackSlot(this.currentFunction, false);
+      const tempOffset = this.allocateStackSlot(this.currentFunction);
       tempStackOffsets.push(tempOffset);
 
       /* Store argument result to temporary location - now consistent for all functions */
