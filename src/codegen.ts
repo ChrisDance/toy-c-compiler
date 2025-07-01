@@ -16,6 +16,25 @@ import {
 } from "./parser";
 
 /* Simple linear-scan register allocator - real compilers use graph coloring with interference analysis */
+
+/*
+
+
+int result = (a + b) * (c + d) * (e + f);
+// Evaluate (a + b)
+generateExpression(a)     // → x0
+leftReg = allocate()      // → x8, move x0 to x8
+generateExpression(b)     // → x0
+rightReg = allocate()     // → x9, move x0 to x9
+// Perform: add x0, x8, x9
+release(x8), release(x9)  // x8, x9 back to pool
+
+// Evaluate (c + d)
+leftReg = allocate()      // → x8 (reused!)
+rightReg = allocate()     // → x9 (reused!)
+// ... and so on
+*/
+
 class RegisterAllocator {
   /* Fixed pool of callee-saved registers - real allocators consider register classes and calling conventions */
   private availableRegs = [
@@ -221,19 +240,71 @@ export class ARM64CodeGenerator {
     }
   }
 
-  /* Stack frame size calculation - real compilers use sophisticated frame analysis */
+  /* Simple variable counting - demonstrates basic static analysis */
+  private countLocalVariables(block: BlockStatement): number {
+    let count = 0;
+
+    for (const stmt of block.statements) {
+      count += this.countVariablesInStatement(stmt);
+    }
+
+    return count;
+  }
+
+  /* Recursive variable counting - handles nested blocks */
+  private countVariablesInStatement(stmt: Statement): number {
+    switch (stmt.type) {
+      case "VariableDeclaration":
+        return 1;
+
+      case "BlockStatement":
+        return this.countLocalVariables(stmt);
+
+      case "IfStatement":
+        let ifCount = 0;
+        if (stmt.thenBranch.type === "BlockStatement") {
+          ifCount += this.countLocalVariables(stmt.thenBranch);
+        } else {
+          ifCount += this.countVariablesInStatement(stmt.thenBranch);
+        }
+
+        if (stmt.elseBranch) {
+          if (stmt.elseBranch.type === "BlockStatement") {
+            ifCount += this.countLocalVariables(stmt.elseBranch);
+          } else {
+            ifCount += this.countVariablesInStatement(stmt.elseBranch);
+          }
+        }
+        return ifCount;
+
+      case "WhileStatement":
+        if (stmt.body.type === "BlockStatement") {
+          return this.countLocalVariables(stmt.body);
+        } else {
+          return this.countVariablesInStatement(stmt.body);
+        }
+
+      default:
+        return 0;
+    }
+  }
+
+  /* Stack frame size calculation */
   private calculateStackSizeForFunction(func: FunctionDeclaration): number {
-    /* Conservative estimation approach - real compilers do precise liveness analysis */
     const baseStackSize = 32;
+    /*
+      base stack includes:
+      return address 8 bytes,
+      frame pointer 8 bytes
+      spill space for register saves 16 bytes;
+   */
 
-    /* ARM64 requires 8-byte alignment for parameters */
-    const parameterSpace = Math.max(
-      32,
-      Math.ceil((func.params.length * 8) / 8) * 8,
-    );
+    /* ARM64 requires 8-byte alignment for parameters for up to 8 parameters*/
+    const parameterSpace = Math.max(32, func.params.length * 8);
 
-    /* Fixed allocations - real compilers calculate exact requirements */
-    const localVarSpace = 64;
+    /* Required space for variables in frame */
+    const localVarCount = this.countLocalVariables(func.body);
+    const localVarSpace = localVarCount * 8;
     const tempSpace = 32;
 
     /* ARM64 ABI requires 16-byte stack alignment */
@@ -269,6 +340,28 @@ export class ARM64CodeGenerator {
     this.addLine(`\tsub\tsp, sp, #${totalStackSize}`);
     this.addLine(`\tstp\tx29, x30, [sp, #${totalStackSize - 16}]`);
     this.addLine(`\tadd\tx29, sp, #${totalStackSize - 16}`);
+
+    /*
+    High Memory Addresses
+    ┌─────────────────┐
+    │   Other Data    │
+    ├─────────────────┤
+    │  Stack Frame N  │             ← Previous function's frame
+    ├─────────────────┤
+    │ Return Address  │             ← Where to return after current function
+    │ Saved x29 (FP)  │             ← Previous frame pointer
+    ├─────────────────┤  ← x29 (Frame Pointer) points here
+    │                 │
+    │  Local Vars     │             ← Variables allocated here
+    │   (growing      │
+    │   downward)     │
+    ├─────────────────┤  ← Stack Pointer (SP) moves as stack grows
+    │  Free Stack     │
+    │   Space         │
+    └─────────────────┘
+    Low Memory Addresses
+
+    */
 
     /* Parameter storage - implements ARM64 calling convention */
     for (let i = 0; i < func.params.length; i++) {
@@ -366,6 +459,19 @@ export class ARM64CodeGenerator {
 
   /* Stack slot allocation - demonstrates memory layout management */
   private allocateStackSlot(funcName: string): number {
+    /*
+   x29 (Frame Pointer) →  ┌─────────────────┐
+                          │  Saved Data     │          |
+                          ├─────────────────┤
+   [x29, #-8]  →          │   Variable 1    │← 8 bytes |
+                          ├─────────────────┤
+   [x29, #-16] →          │   Variable 2    │← 8 bytes |
+                          ├─────────────────┤
+   [x29, #-24] →          │   Variable 3    │← 8 bytes |
+                          ├─────────────────┤
+                          │   Free Space    │          |
+   */
+
     const currentOffset = this.nextOffsetMap.get(funcName)!;
     this.nextOffsetMap.set(funcName, currentOffset + 8);
 

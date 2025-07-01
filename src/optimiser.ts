@@ -27,7 +27,7 @@ export interface OptimizationStats {
   algebraicSimplification: number;
   totalOptimizations: number;
   functionsRemoved: number;
-  pointersDetected: number; // New: track pointer detection
+  pointersDetected: number; // Track pointer detection for conservative analysis
 }
 
 interface ConstantMap {
@@ -56,10 +56,10 @@ export class IterativeOptimizer {
   private currentPhase!: OptimizationPhase;
   private phaseChanged: boolean = false;
 
-  // Pointer-related tracking
+  /* Pointer safety tracking - essential for correctness in presence of aliasing */
   private hasPointers: boolean = false;
-  private pointerVariables!: Set<string>; // Variables that are pointers
-  private pointerReferencedVariables!: Set<string>; // Variables that have their address taken
+  private pointerVariables!: Set<string>; // Variables declared as pointer types
+  private pointerReferencedVariables!: Set<string>; // Variables with address taken (&var)
 
   constructor() {
     this.resetStats();
@@ -94,8 +94,8 @@ export class IterativeOptimizer {
 
   functionQueue: FunctionDeclaration[] = [];
   _program!: Program;
-  functionPass = false;
 
+  /* Multi-pass optimization with fixed-point iteration - continues until no changes */
   optimize(
     program: Program,
     maxPasses: number = 10,
@@ -105,7 +105,7 @@ export class IterativeOptimizer {
     let currentProgram = this.deepClone(program);
     this._program = currentProgram;
 
-    // First pass: detect pointers throughout the program
+    /* Phase 0: Conservative pointer analysis - disables optimization for aliased memory */
     console.log("\n=== Pointer Detection Phase ===");
     this.detectPointers(currentProgram);
 
@@ -125,6 +125,7 @@ export class IterativeOptimizer {
 
     let passChanged = true;
 
+    /* Fixed-point iteration - real compilers use worklist algorithms for efficiency */
     while (passChanged && this.stats.passes < maxPasses) {
       this.stats.passes++;
       this.resetPassStats();
@@ -132,7 +133,9 @@ export class IterativeOptimizer {
 
       passChanged = false;
 
-      // Phase 1: Dead Code Elimination
+      /* Phase ordering crucial - DCE enables more optimization, CP+CF work together */
+
+      // Phase 1: Dead Code Elimination - removes unused variables and unreachable code
       this.currentPhase = OptimizationPhase.DeadCodeElimination;
       this.phaseChanged = false;
       console.log(`\nPass ${this.stats.passes}: ${this.currentPhase}`);
@@ -149,7 +152,7 @@ export class IterativeOptimizer {
         );
       }
 
-      // Phase 2: Constant Propagation
+      // Phase 2: Constant Propagation - replaces variable uses with their constant values
       this.currentPhase = OptimizationPhase.ConstantPropagation;
       this.phaseChanged = false;
       console.log(`\nPass ${this.stats.passes}: ${this.currentPhase}`);
@@ -164,7 +167,7 @@ export class IterativeOptimizer {
         );
       }
 
-      // Phase 3: Constant Folding & Algebraic Simplification
+      // Phase 3: Constant Folding & Algebraic Simplification - evaluates constant expressions
       this.currentPhase = OptimizationPhase.ConstantFolding;
       this.phaseChanged = false;
       console.log(`\nPass ${this.stats.passes}: ${this.currentPhase}`);
@@ -179,7 +182,7 @@ export class IterativeOptimizer {
         );
       }
 
-      // Update cumulative stats
+      // Update cumulative statistics
       this.stats.constantFolding += this.currentPassStats.constantFolding;
       this.stats.constantPropagation +=
         this.currentPassStats.constantPropagation;
@@ -196,14 +199,14 @@ export class IterativeOptimizer {
       this.stats.algebraicSimplification;
     console.log(`\nOptimization completed after ${this.stats.passes} passes`);
 
-    // Phase 4: Dead Function Elimination
+    /* Phase 4: Dead Function Elimination - call graph analysis starting from main */
     console.log("\n=== Dead Function Elimination ===");
 
     if (currentProgram.functions.length === 0) {
       throw new Error("Program needs at least one function");
     }
 
-    // Find and validate main function exists
+    // Find and validate main function exists - entry point for call graph traversal
     const mainFunction = currentProgram.functions.find(
       (f) => f.name === "main",
     );
@@ -211,7 +214,7 @@ export class IterativeOptimizer {
       throw new Error("Program needs a main function");
     }
 
-    // Track function usage starting from main
+    /* BFS traversal of call graph - more systematic than recursive approach */
     const calledFunctions = new Set<string>();
     const functionQueue: FunctionDeclaration[] = [mainFunction];
 
@@ -219,7 +222,7 @@ export class IterativeOptimizer {
     while (functionQueue.length > 0) {
       const currentFunction = functionQueue.shift()!;
 
-      // Skip if already processed
+      // Skip if already processed - avoids infinite recursion
       if (calledFunctions.has(currentFunction.name)) {
         continue;
       }
@@ -227,7 +230,6 @@ export class IterativeOptimizer {
       calledFunctions.add(currentFunction.name);
       console.log(`Processing function: ${currentFunction.name}`);
 
-      this.functionPass = true;
       // Find any function calls in this function and add to queue
       this.findFunctionCalls(currentFunction).forEach((funcName) => {
         const calledFunc = currentProgram.functions.find(
@@ -263,9 +265,7 @@ export class IterativeOptimizer {
 
   // =================== POINTER DETECTION ===================
 
-  /**
-   * Detects all pointer usage in the program and marks relevant variables
-   */
+  /* Conservative pointer analysis - errs on side of safety to prevent incorrect optimization */
   private detectPointers(program: Program): void {
     this.hasPointers = false;
     this.pointerVariables.clear();
@@ -285,7 +285,7 @@ export class IterativeOptimizer {
       );
     }
 
-    // Check parameter types
+    // Check parameter types - function signatures define pointer semantics
     for (const param of func.params) {
       if (param.paramType.includes("*")) {
         this.hasPointers = true;
@@ -316,7 +316,7 @@ export class IterativeOptimizer {
       case NodeType.AssignmentStatement:
         const assignment = stmt as AssignmentStatement;
         if (typeof assignment.target !== "string") {
-          // This is a UnaryExpression (dereferenced pointer assignment)
+          /* Dereferenced pointer assignment (*ptr = value) - indicates pointer usage */
           this.hasPointers = true;
           console.log(
             `  Found dereferenced pointer assignment: *${(assignment.target as UnaryExpression).operand}`,
@@ -366,14 +366,14 @@ export class IterativeOptimizer {
         this.hasPointers = true;
 
         if (unaryExpr.operator === "&") {
-          // Address-of operation
+          /* Address-of operation (&var) - marks variable as having escaped address */
           if (unaryExpr.operand.type === NodeType.Identifier) {
             const varName = (unaryExpr.operand as Identifier).name;
             this.pointerReferencedVariables.add(varName);
             console.log(`  Address taken of variable: ${varName}`);
           }
         } else if (unaryExpr.operator === "*") {
-          // Dereference operation
+          /* Dereference operation (*ptr) - indicates pointer usage */
           console.log(`  Found pointer dereference operation`);
         }
 
@@ -393,7 +393,7 @@ export class IterativeOptimizer {
         }
         break;
 
-      // Identifier and NumberLiteral don't need special handling
+      /* Identifier and NumberLiteral are safe by themselves */
       default:
         break;
     }
@@ -401,9 +401,7 @@ export class IterativeOptimizer {
 
   // =================== POINTER-SAFE OPTIMIZATION CHECKS ===================
 
-  /**
-   * Determines if a variable can be safely optimized (not a pointer and address not taken)
-   */
+  /* Aliasing analysis - determines if variable can be safely optimized */
   private canOptimizeVariable(varName: string): boolean {
     if (!this.hasPointers) return true;
 
@@ -420,9 +418,7 @@ export class IterativeOptimizer {
     return true;
   }
 
-  /**
-   * Determines if an expression contains any pointer operations
-   */
+  /* May-alias analysis for expressions - conservative approach */
   private containsPointerOperations(expr: Expression): boolean {
     switch (expr.type) {
       case NodeType.UnaryExpression:
@@ -451,9 +447,7 @@ export class IterativeOptimizer {
     }
   }
 
-  /**
-   * Determines if a statement involves pointers and should be excluded from optimization
-   */
+  /* Statement-level aliasing check - prevents optimization of aliased memory */
   private statementInvolvesPointers(stmt: Statement): boolean {
     switch (stmt.type) {
       case NodeType.VariableDeclaration:
@@ -465,11 +459,11 @@ export class IterativeOptimizer {
 
       case NodeType.AssignmentStatement:
         const assignment = stmt as AssignmentStatement;
-        // Check if target is a dereferenced pointer
+        /* Check if target is a dereferenced pointer (*ptr = value) */
         if (typeof assignment.target !== "string") {
           return true;
         }
-        // Check if target variable is a pointer or has address taken
+        /* Check if target variable is aliased */
         if (!this.canOptimizeVariable(assignment.target)) {
           return true;
         }
@@ -498,9 +492,9 @@ export class IterativeOptimizer {
     }
   }
 
-  // =================== MODIFIED OPTIMIZATION PHASES ===================
+  // =================== OPTIMIZATION PHASES ===================
 
-  // Helper method to find function calls within a function
+  /* Function call discovery - builds call graph for dead function elimination */
   private findFunctionCalls(func: FunctionDeclaration): string[] {
     const calls: string[] = [];
 
@@ -556,7 +550,7 @@ export class IterativeOptimizer {
     return calls;
   }
 
-  // Dead Code Elimination Phase
+  /* Dead Code Elimination - removes unused variables and unreachable statements */
   private runDeadCodeElimination(program: Program): Program {
     return {
       type: NodeType.Program,
@@ -577,6 +571,7 @@ export class IterativeOptimizer {
 
     for (const stmt of block.statements) {
       if (foundReturn) {
+        /* Unreachable code elimination - anything after return is dead */
         this.currentPassStats.deadCodeElimination++;
         this.phaseChanged = true;
         console.log(`  DCE: Removed unreachable statement after return`);
@@ -599,7 +594,7 @@ export class IterativeOptimizer {
   }
 
   private dceStatement(stmt: Statement): Statement | null {
-    // POINTER SAFETY: Skip optimization if statement involves pointers
+    /* Conservative approach - skip optimization of pointer-related code */
     if (this.statementInvolvesPointers(stmt)) {
       console.log(`  DCE: Skipping pointer-related statement`);
       return stmt;
@@ -613,6 +608,7 @@ export class IterativeOptimizer {
           !this.hasSideEffects(varDecl.init) &&
           this.canOptimizeVariable(varDecl.name)
         ) {
+          /* Dead store elimination - unused variable declarations */
           this.currentPassStats.deadCodeElimination++;
           this.phaseChanged = true;
           console.log(`  DCE: Removed unused variable '${varDecl.name}'`);
@@ -628,6 +624,7 @@ export class IterativeOptimizer {
           !this.hasSideEffects(assignment.value) &&
           this.canOptimizeVariable(assignment.target)
         ) {
+          /* Dead assignment elimination - assignments to unused variables */
           this.currentPassStats.deadCodeElimination++;
           this.phaseChanged = true;
           console.log(
@@ -644,6 +641,7 @@ export class IterativeOptimizer {
           condition.type === NodeType.NumberLiteral &&
           !this.containsPointerOperations(condition)
         ) {
+          /* Branch elimination based on constant conditions */
           const condValue = (condition as NumberLiteral).value;
           this.currentPassStats.deadCodeElimination++;
           this.phaseChanged = true;
@@ -693,6 +691,7 @@ export class IterativeOptimizer {
       case NodeType.ExpressionStatement:
         const exprStmt = stmt as ExpressionStatement;
         if (!this.hasSideEffects(exprStmt.expression)) {
+          /* Pure expression elimination - expressions without side effects */
           this.currentPassStats.deadCodeElimination++;
           this.phaseChanged = true;
           console.log(`  DCE: Removed side-effect-free expression statement`);
@@ -705,7 +704,7 @@ export class IterativeOptimizer {
     }
   }
 
-  // Constant Propagation Phase
+  /* Constant Propagation - replaces variable uses with their constant values */
   private runConstantPropagation(program: Program): Program {
     return {
       type: NodeType.Program,
@@ -729,7 +728,7 @@ export class IterativeOptimizer {
   }
 
   private cpStatement(stmt: Statement): Statement {
-    // POINTER SAFETY: Skip optimization if statement involves pointers
+    /* Conservative approach - avoid propagating into pointer-related code */
     if (this.statementInvolvesPointers(stmt)) {
       console.log(`  CP: Skipping pointer-related statement`);
       return stmt;
@@ -740,7 +739,7 @@ export class IterativeOptimizer {
         const varDecl = stmt as VariableDeclaration;
         const init = this.cpExpression(varDecl.init);
 
-        // Track constant values only for non-pointer variables
+        /* Track constant values for subsequent propagation */
         if (
           init.type === NodeType.NumberLiteral &&
           this.canOptimizeVariable(varDecl.name)
@@ -757,7 +756,7 @@ export class IterativeOptimizer {
         const assignment = stmt as AssignmentStatement;
         const value = this.cpExpression(assignment.value);
 
-        // Track constant values only for non-pointer variables
+        /* Update constant tracking based on assignment */
         if (
           typeof assignment.target === "string" &&
           this.canOptimizeVariable(assignment.target)
@@ -767,6 +766,7 @@ export class IterativeOptimizer {
               value as NumberLiteral
             ).value;
           } else {
+            /* Non-constant assignment invalidates previous constant value */
             delete this.constantValues[assignment.target];
           }
         }
@@ -780,20 +780,20 @@ export class IterativeOptimizer {
         const ifStmt = stmt as IfStatement;
         const condition = this.cpExpression(ifStmt.condition);
 
-        // FIXED: Check if condition is a constant (conditional constant propagation)
+        /* Conditional constant propagation - constant condition enables branch elimination */
         if (condition.type === NodeType.NumberLiteral) {
           const condValue = (condition as NumberLiteral).value;
           this.currentPassStats.constantPropagation++;
           this.phaseChanged = true;
 
           if (condValue !== 0) {
-            // Condition is true - only process then branch
+            /* True condition - only process then branch */
             console.log(
               `  CP: Condition always true, processing only then branch`,
             );
             return this.cpStatement(ifStmt.thenBranch);
           } else {
-            // Condition is false - only process else branch (if it exists)
+            /* False condition - only process else branch */
             console.log(
               `  CP: Condition always false, processing only else branch`,
             );
@@ -803,8 +803,7 @@ export class IterativeOptimizer {
           }
         }
 
-        // Condition is not constant - need to handle both branches carefully
-        // Save current constant state before processing branches
+        /* SSA-style merging - variables constant on both paths remain constant */
         const savedConstants = { ...this.constantValues };
 
         // Process then branch
@@ -818,14 +817,14 @@ export class IterativeOptimizer {
           : null;
         const elseConstants = { ...this.constantValues };
 
-        // Merge constant states: keep only variables that have the same constant value in both branches
+        /* Merge constant states - conservative approach */
         this.constantValues = {};
         for (const varName in savedConstants) {
           const originalValue = savedConstants[varName];
           const thenValue = thenConstants[varName];
           const elseValue = elseConstants[varName];
 
-          // If variable has same constant value in both branches, keep it as constant
+          // Keep variables that have same constant value in both branches
           if (
             thenValue !== undefined &&
             elseValue !== undefined &&
@@ -837,10 +836,10 @@ export class IterativeOptimizer {
             thenValue !== undefined &&
             thenValue === originalValue
           ) {
-            // No else branch and then branch didn't change the value - keep original
+            /* No else branch and value unchanged in then branch */
             this.constantValues[varName] = originalValue;
           } else if (!ifStmt.elseBranch && originalValue !== undefined) {
-            // No else branch, keep variables that weren't modified in then branch
+            /* No else branch - keep unmodified variables */
             if (
               !(varName in thenConstants) ||
               thenConstants[varName] === originalValue
@@ -848,7 +847,6 @@ export class IterativeOptimizer {
               this.constantValues[varName] = originalValue;
             }
           }
-          // Otherwise, variable is no longer constant after the if statement
         }
 
         return {
@@ -862,16 +860,15 @@ export class IterativeOptimizer {
       case NodeType.WhileStatement:
         const whileStmt = stmt as WhileStatement;
 
-        // First, get all variables that are modified in the loop body
+        /* Loop analysis - variables modified in loop cannot be treated as constants */
         const modifiedVars = this.getModifiedVariables(whileStmt.body);
 
-        // Get variables used in the condition
+        /* Variables used in condition that are modified in body lose constant status */
         const conditionVars = this.getVariablesInExpression(
           whileStmt.condition,
         );
 
-        // If any variable in the condition is modified in the loop body,
-        // we cannot treat it as constant for the condition evaluation
+        /* Conservative invalidation of loop-modified variables in condition */
         const savedConstants: { [key: string]: number | undefined } = {};
         for (const condVar of conditionVars) {
           if (modifiedVars.has(condVar)) {
@@ -880,11 +877,10 @@ export class IterativeOptimizer {
           }
         }
 
-        // Now process the condition without treating loop-modified variables as constants
+        /* Process condition without treating loop-modified variables as constants */
         const condition = this.cpExpression(whileStmt.condition);
 
-        // For processing the body, remove ALL loop-modified variables from constants
-        // that we can optimize
+        /* Remove ALL loop-modified variables from constant tracking */
         for (const modVar of modifiedVars) {
           if (this.canOptimizeVariable(modVar)) {
             delete this.constantValues[modVar];
@@ -922,7 +918,7 @@ export class IterativeOptimizer {
   }
 
   private cpExpression(expr: Expression): Expression {
-    // POINTER SAFETY: Skip optimization if expression contains pointer operations
+    /* Conservative approach - avoid propagating through pointer operations */
     if (this.containsPointerOperations(expr)) {
       console.log(`  CP: Skipping pointer-related expression`);
       return expr;
@@ -936,6 +932,7 @@ export class IterativeOptimizer {
           this.constantValues[id.name] !== undefined &&
           this.canOptimizeVariable(id.name)
         ) {
+          /* Variable-to-constant replacement - core of constant propagation */
           this.currentPassStats.constantPropagation++;
           this.phaseChanged = true;
           console.log(
@@ -958,11 +955,6 @@ export class IterativeOptimizer {
 
       case NodeType.FunctionCall:
         const funcCall = expr as FunctionCall;
-        if (this.functionPass) {
-          this.functionQueue.push(
-            this._program.functions.find((f) => f.name === funcCall.callee)!,
-          );
-        }
 
         return {
           ...funcCall,
@@ -974,7 +966,7 @@ export class IterativeOptimizer {
     }
   }
 
-  // Constant Folding & Algebraic Simplification Phase
+  /* Constant Folding & Algebraic Simplification - evaluates constant expressions */
   private runConstantFolding(program: Program): Program {
     return {
       type: NodeType.Program,
@@ -997,7 +989,7 @@ export class IterativeOptimizer {
   }
 
   private cfStatement(stmt: Statement): Statement {
-    // POINTER SAFETY: Skip optimization if statement involves pointers
+    /* Conservative approach - avoid folding pointer-related expressions */
     if (this.statementInvolvesPointers(stmt)) {
       console.log(`  CF: Skipping pointer-related statement`);
       return stmt;
@@ -1034,11 +1026,10 @@ export class IterativeOptimizer {
       case NodeType.WhileStatement:
         const whileStmt = stmt as WhileStatement;
 
-        // Get all variables modified in the loop body
+        /* Remove loop-modified variables from constant tracking */
         const modifiedVars = this.getModifiedVariables(whileStmt.body);
 
-        // Remove loop-modified variables from being treated as constants
-        // only for variables we can optimize
+        /* Conservative invalidation - variables modified in loop lose constant status */
         const savedConstants: { [key: string]: number | undefined } = {};
         for (const modVar of modifiedVars) {
           if (this.canOptimizeVariable(modVar)) {
@@ -1049,7 +1040,7 @@ export class IterativeOptimizer {
 
         const whileCondition = this.cfExpression(whileStmt.condition);
 
-        // Check for constant false condition
+        /* Dead loop elimination - while(0) can be removed entirely */
         if (
           whileCondition.type === NodeType.NumberLiteral &&
           !this.containsPointerOperations(whileCondition)
@@ -1092,7 +1083,7 @@ export class IterativeOptimizer {
   }
 
   private cfExpression(expr: Expression): Expression {
-    // POINTER SAFETY: Skip optimization if expression contains pointer operations
+    /* Conservative approach - avoid folding expressions with pointer operations */
     if (this.containsPointerOperations(expr)) {
       console.log(`  CF: Skipping pointer-related expression`);
       return expr;
@@ -1104,7 +1095,7 @@ export class IterativeOptimizer {
         const left = this.cfExpression(binExpr.left);
         const right = this.cfExpression(binExpr.right);
 
-        // Algebraic Simplification first
+        /* Algebraic simplification before constant folding - catches more cases */
         const simplified = this.algebraicSimplify(
           binExpr.operator,
           left,
@@ -1114,7 +1105,7 @@ export class IterativeOptimizer {
           return simplified;
         }
 
-        // Then constant folding
+        /* Constant folding - compile-time evaluation of constant expressions */
         if (
           left.type === NodeType.NumberLiteral &&
           right.type === NodeType.NumberLiteral
@@ -1137,6 +1128,7 @@ export class IterativeOptimizer {
               if (rightVal === 0) {
                 throw new Error("Division by zero");
               }
+              /* Integer division - matches C semantics */
               result = Math.floor(leftVal / rightVal);
               break;
             case "<":
@@ -1164,11 +1156,6 @@ export class IterativeOptimizer {
 
       case NodeType.FunctionCall:
         const funcCall = expr as FunctionCall;
-        if (this.functionPass) {
-          this.functionQueue.push(
-            this._program.functions.find((f) => f.name === funcCall.callee)!,
-          );
-        }
         return {
           ...funcCall,
           arguments: funcCall.arguments.map((arg) => this.cfExpression(arg)),
@@ -1179,12 +1166,13 @@ export class IterativeOptimizer {
     }
   }
 
+  /* Algebraic simplification - strength reduction and identity elimination */
   private algebraicSimplify(
     operator: string,
     left: Expression,
     right: Expression,
   ): Expression | null {
-    // x + 0 = x, x - 0 = x
+    /* Addition/subtraction identity: x + 0 = x, x - 0 = x */
     if (
       (operator === "+" || operator === "-") &&
       right.type === NodeType.NumberLiteral &&
@@ -1196,7 +1184,7 @@ export class IterativeOptimizer {
       return left;
     }
 
-    // 0 + x = x
+    /* Addition commutativity: 0 + x = x */
     if (
       operator === "+" &&
       left.type === NodeType.NumberLiteral &&
@@ -1208,7 +1196,7 @@ export class IterativeOptimizer {
       return right;
     }
 
-    // x * 1 = x
+    /* Multiplication identity: x * 1 = x */
     if (
       operator === "*" &&
       right.type === NodeType.NumberLiteral &&
@@ -1220,7 +1208,7 @@ export class IterativeOptimizer {
       return left;
     }
 
-    // 1 * x = x
+    /* Multiplication commutativity: 1 * x = x */
     if (
       operator === "*" &&
       left.type === NodeType.NumberLiteral &&
@@ -1232,7 +1220,7 @@ export class IterativeOptimizer {
       return right;
     }
 
-    // x * 0 = 0, 0 * x = 0
+    /* Multiplication by zero: x * 0 = 0, 0 * x = 0 */
     if (
       operator === "*" &&
       ((left.type === NodeType.NumberLiteral &&
@@ -1246,7 +1234,7 @@ export class IterativeOptimizer {
       return { type: NodeType.NumberLiteral, value: 0 };
     }
 
-    // x / 1 = x
+    /* Division identity: x / 1 = x */
     if (
       operator === "/" &&
       right.type === NodeType.NumberLiteral &&
@@ -1261,6 +1249,7 @@ export class IterativeOptimizer {
     return null;
   }
 
+  /* Liveness analysis - determines which variables are actually used */
   private collectUsedVariables(program: Program): void {
     for (const func of program.functions) {
       this.collectUsedVariablesInFunction(func);
@@ -1334,11 +1323,6 @@ export class IterativeOptimizer {
         break;
       case NodeType.FunctionCall:
         const funcCall = expr as FunctionCall;
-        if (this.functionPass) {
-          this.functionQueue.push(
-            this._program.functions.find((f) => f.name === funcCall.callee)!,
-          );
-        }
         for (const arg of funcCall.arguments) {
           this.collectUsedVariablesInExpression(arg);
         }
@@ -1346,10 +1330,61 @@ export class IterativeOptimizer {
     }
   }
 
+  /* Pure function whitelist - functions known to have no side effects */
+  private readonly pureFunctions = new Set([
+    "abs",
+    "max",
+    "min",
+    "sqrt",
+    "pow",
+    "sin",
+    "cos",
+    "tan",
+    "floor",
+    "ceil",
+    "round",
+    "log",
+    "exp",
+    "fabs",
+    "strlen",
+  ]);
+
+  /* Side effect analysis with interprocedural awareness */
   private hasSideEffects(expr: Expression): boolean {
     switch (expr.type) {
       case NodeType.FunctionCall:
-        return true; // Assume all function calls have side effects
+        const funcCall = expr as FunctionCall;
+
+        /* Mathematical and string utility functions are typically pure */
+        if (this.pureFunctions.has(funcCall.callee)) {
+          console.log(`  Pure function detected: ${funcCall.callee}`);
+          return false;
+        }
+
+        /* User-defined functions: check if they modify global state */
+        const calledFunction = this._program.functions.find(
+          (f) => f.name === funcCall.callee,
+        );
+        if (calledFunction) {
+          /* Quick heuristic: functions that only do arithmetic and return values are likely pure */
+          if (this.isPureUserFunction(calledFunction)) {
+            console.log(`  User function appears pure: ${funcCall.callee}`);
+            return false;
+          }
+        }
+
+        /* I/O functions and system calls - definitely have side effects */
+        if (
+          ["printf", "scanf", "exit", "malloc", "free"].includes(
+            funcCall.callee,
+          )
+        ) {
+          return true;
+        }
+
+        /* Conservative fallback - unknown functions assumed to have side effects */
+        return true;
+
       case NodeType.BinaryExpression:
         const binExpr = expr as BinaryExpression;
         return (
@@ -1358,12 +1393,75 @@ export class IterativeOptimizer {
         );
       case NodeType.UnaryExpression:
         const unaryExpr = expr as UnaryExpression;
+        /* Address-of and dereference operations don't have side effects themselves */
         return this.hasSideEffects(unaryExpr.operand);
       default:
         return false;
     }
   }
 
+  /* Heuristic analysis for user-defined function purity */
+  private isPureUserFunction(func: FunctionDeclaration): boolean {
+    /* Functions with pointer parameters likely modify external state */
+    if (func.params.some((p) => p.paramType.includes("*"))) {
+      return false;
+    }
+
+    /* Functions that return void likely have side effects */
+    if (func.returnType === "void") {
+      return false;
+    }
+
+    /* Quick scan: does function contain only arithmetic and return? */
+    return this.containsOnlyPureOperations(func.body);
+  }
+
+  /* Check if statement block contains only pure operations */
+  private containsOnlyPureOperations(stmt: Statement): boolean {
+    switch (stmt.type) {
+      case NodeType.BlockStatement:
+        const block = stmt as BlockStatement;
+        return block.statements.every((s) =>
+          this.containsOnlyPureOperations(s),
+        );
+
+      case NodeType.ReturnStatement:
+        const returnStmt = stmt as ReturnStatement;
+        return !this.hasSideEffects(returnStmt.argument);
+
+      case NodeType.VariableDeclaration:
+        const varDecl = stmt as VariableDeclaration;
+        /* Local variable declarations with pure initializers are OK */
+        return !this.hasSideEffects(varDecl.init);
+
+      case NodeType.AssignmentStatement:
+        const assignment = stmt as AssignmentStatement;
+        /* Assignments to local variables with pure RHS are OK */
+        return (
+          typeof assignment.target === "string" &&
+          !this.hasSideEffects(assignment.value)
+        );
+
+      case NodeType.IfStatement:
+        const ifStmt = stmt as IfStatement;
+        return (
+          !this.hasSideEffects(ifStmt.condition) &&
+          this.containsOnlyPureOperations(ifStmt.thenBranch) &&
+          (!ifStmt.elseBranch ||
+            this.containsOnlyPureOperations(ifStmt.elseBranch))
+        );
+
+      case NodeType.ExpressionStatement:
+        /* Pure expression statements are rare but possible */
+        return !this.hasSideEffects((stmt as ExpressionStatement).expression);
+
+      default:
+        /* Loops and other complex control flow - conservatively assume impure */
+        return false;
+    }
+  }
+
+  /* Def-use analysis; finds variables modified by statement */
   private getModifiedVariables(stmt: Statement): Set<string> {
     const modified = new Set<string>();
 
@@ -1438,6 +1536,7 @@ export class IterativeOptimizer {
     return modified;
   }
 
+  /* Variable reference analysis; finds all variables referenced in expression */
   private getVariablesInExpression(expr: Expression): Set<string> {
     const variables = new Set<string>();
 
