@@ -1,6 +1,8 @@
 import { ARM64CodeGenerator } from "./codegen";
+import { ARM64Interpreter } from "./interpreter";
 import { Lexer, Token } from "./Lexer";
 import { IterativeOptimizer } from "./optimiser";
+
 import { Parser, Program } from "./parser";
 
 export class Compiler {
@@ -21,6 +23,16 @@ export class Compiler {
   public static generate(program: Program): string {
     const generator = new ARM64CodeGenerator();
     return generator.generate(program);
+  }
+
+  public static interpret(asm: string): string {
+    const interpreter = new ARM64Interpreter();
+    interpreter.loadAssembly(asm);
+    const result = interpreter.execute();
+    if (result.error) {
+      return result.error;
+    }
+    return result.output;
   }
 
   public static compile(source: string, optimise = true): string {
