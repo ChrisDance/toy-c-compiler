@@ -1,34 +1,34 @@
-import { writeFileSync } from "fs";
-import { working } from "./code_samples";
 import { ARM64CodeGenerator } from "./codegen";
-import { Lexer } from "./Lexer";
+import { Lexer, Token } from "./Lexer";
 import { IterativeOptimizer } from "./optimiser";
-import { Parser } from "./parser";
-import { LOG } from "./utils";
-let i = 1;
-// working.unshift(
-//
+import { Parser, Program } from "./parser";
 
-//
-//
-// );
-for (const prog of working) {
-  const tokens = new Lexer(prog.code).scanTokens();
-  const ast = new Parser(tokens).parse();
-  console.log(JSON.stringify(ast));
-  const optimizer = new IterativeOptimizer();
+export class Compiler {
+  public static tokenize(source: string): Token[] {
+    const tokens = new Lexer(source).scanTokens();
+    return tokens;
+  }
 
-  LOG(optimizer.optimize(ast));
-  break;
-  // const { optimized: optimizedAst, stats } = optimizer.optimize(ast);
-  // console.log("Optimization Statistics:");
-  // console.log(`Constant folding optimizations: ${stats.constantFolding}`);
-  // console.log(`Dead code eliminations: ${stats.deadCodeElimination}`);
-  // console.log(`Algebraic simplifications: ${stats.algebraicSimplification}`);
-  // console.log(`Functions removed : ${stats.functionsRemoved}`);
+  public static parse(tokens: Token[]): Program {
+    const ast = new Parser(tokens).parse();
+    return ast;
+  }
 
-  let asm;
-  asm = new ARM64CodeGenerator().generate(ast);
-  writeFileSync("output.s", asm);
-  break;
+  public static optimise(program: Program): Program {
+    return new IterativeOptimizer().optimize(program).optimized;
+  }
+
+  public static generate(program: Program): string {
+    const generator = new ARM64CodeGenerator();
+    return generator.generate(program);
+  }
+
+  public static compile(source: string, optimise = true): string {
+    const tokens = this.tokenize(source);
+    const ast = this.parse(tokens);
+    if (optimise) {
+      return this.generate(this.optimise(ast));
+    }
+    return this.generate(ast);
+  }
 }

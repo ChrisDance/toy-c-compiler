@@ -253,6 +253,7 @@ export class ARM64CodeGenerator {
 
   private generateFunction(func: FunctionDeclaration): void {
     this.currentFunction = func.name;
+    /*would this work with recursive calls if it mutates variables? */
     this.varLocationMap.set(func.name, new Map());
 
     // Create a unique end label for this function
@@ -406,15 +407,17 @@ export class ARM64CodeGenerator {
   }
 
   private allocateStackSlot(funcName: string, frameRelative: boolean): number {
-    if (!this.nextOffsetMap.has(funcName)) {
-      // Initialize based on function type
-      if (funcName === "main") {
-        this.nextOffsetMap.set(funcName, frameRelative ? -8 : 8); // Changed to 8-byte alignment
-      } else {
-        // Start further down to account for parameters
-        this.nextOffsetMap.set(funcName, frameRelative ? -8 : 16); // Changed to 8-byte alignment
-      }
-    }
+    /* shouldn't occur */
+    // if (!this.nextOffsetMap.has(funcName)) {
+    //   throw new Error("didnt allocate stack slot");
+    //   // Initialize based on function type
+    //   if (funcName === "main") {
+    //     this.nextOffsetMap.set(funcName, frameRelative ? -8 : 8); // Changed to 8-byte alignment
+    //   } else {
+    //     // Start further down to account for parameters
+    //     this.nextOffsetMap.set(funcName, frameRelative ? -8 : 16); // Changed to 8-byte alignment
+    //   }
+    // }
 
     const currentOffset = this.nextOffsetMap.get(funcName)!;
 

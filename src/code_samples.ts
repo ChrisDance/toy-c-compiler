@@ -2,6 +2,45 @@ export type CodeSample = { code: string; output: number };
 export const code_samples: CodeSample[] = [];
 
 export const working = [
+  // {
+  //   code: `
+  //   void recurse(int * loc) {
+  //       if(&loc > 10) {
+  //       } else {
+
+  //        loc = &loc + 1;
+  //        recurse(loc);
+
+  //       }
+
+  //       // return;
+  //   }
+
+  //   int main()
+  //   {
+  //       int i = 0;
+  //       recurse(&i);
+  //       printf(i);
+  //       return 0;
+  //   }
+
+  //   `,
+  //   output: 11,
+  // },
+  // TEST data
+  // {
+  //   code: `
+  //   int data = 5;
+  //   int main() {
+
+  //     printf(data);
+
+  //   return 0;
+  //   }
+
+  //   `,
+  //   output: 5
+  // },
   {
     code: `
     void callWPtr(int * ptr)
@@ -133,15 +172,17 @@ export const working = [
   // Test case for recursion:
   {
     code: `int recurse(int n) {
-              if(n > 5)
+              int i = n;
+              if(i > 5)
               {
-                 return n;
+                 return i;
               }
 
-              return recurse(n + 1);
+              return recurse(i + 1);
 
         }
       int main() {
+
           printf(recurse(1));
           return 0;
       }`,
