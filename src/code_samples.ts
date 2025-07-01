@@ -4,7 +4,25 @@ export const code_samples: CodeSample[] = [];
 export const working = [
   {
     code: `
+    void callWPtr(int * ptr)
+    {
+        printf(&ptr);
+    }
 
+    int main()
+    {
+     int i = 7;
+     int* k = &i;
+     callWPtr(k);
+     return 0;
+    }
+
+    `,
+    output: 7,
+  },
+
+  {
+    code: `
   int main()
   {
    int i = 7;
