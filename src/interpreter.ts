@@ -264,11 +264,19 @@ export class ARM64Interpreter {
       case "cset":
         this.executeCset(operands);
         break;
-
+      case "svc":
+        this.handleSysCall(operands);
+        break;
       default:
         // Silently ignore unknown instructions for now
         this.pc++;
         break;
+    }
+  }
+
+  private handleSysCall(operands: string[]) {
+    if (operands[0] == "#0x80") {
+      this.running = false;
     }
   }
 

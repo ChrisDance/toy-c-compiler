@@ -154,25 +154,25 @@ export const working = [
   },
   // Test 1: Function calls with nested expressions and control flow
   //
-  // {
-  //   code: `
+  {
+    code: `
 
-  //   int Square(int arg) {
-  //   return arg * arg;
-  // }
-  // int main() {
-  //   int i = 5;
-  //   int k = 4;
-  //   int j = k + i;
-  //   if (i > j) {
-  //     printf(Square(Square(2)));
-  //   } else {
-  //     printf(5);
-  //   }
-  //   return 0;
-  // }`,
-  //   output: 5,
-  // },
+    int Square(int arg) {
+    return arg * arg;
+  }
+  int main() {
+    int i = 5;
+    int k = 4;
+    int j = k + i;
+    if (i > j) {
+      printf(Square(Square(2)));
+    } else {
+      printf(5);
+    }
+    return 0;
+  }`,
+    output: 5,
+  },
   //Test 2: While loops (FIXED - added parameter)
   {
     code: `
