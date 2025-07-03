@@ -639,29 +639,12 @@ var Compiler = (() => {
     /* Hard-coded external function implementations - avoids implementing a full linker */
     /* Real compilers generate symbol references resolved at link time */
     specialFunctions = {
-      // Fixed printf special function handling
       printf: (args) => {
         const formatString = "%ld\\n";
         const label = this.addStringLiteral(formatString);
         if (args[0].type === "UnaryExpression") {
           const unaryExpr = args[0];
           if (unaryExpr.operator === "&" && unaryExpr.operand.type === "Identifier") {
-            const varName = unaryExpr.operand.name;
-            const offset = this.getVarLocation(this.currentFunction, varName);
-            if (offset) {
-              return [
-                /* Load the address directly - no dereferencing needed */
-                `	add	x0, sp, #${offset}`,
-                /* ARM64 calling convention setup for variadic functions */
-                "mov x9, sp",
-                "mov x8, x0",
-                "str x8, [x9]",
-                `adrp x0, ${label}@PAGE`,
-                `add x0, x0, ${label}@PAGEOFF`,
-                "bl _printf"
-              ];
-            }
-          } else if (unaryExpr.operator === "*" && unaryExpr.operand.type === "Identifier") {
             const varName = unaryExpr.operand.name;
             const offset = this.getVarLocation(this.currentFunction, varName);
             if (offset) {
@@ -1359,9 +1342,20 @@ var Compiler = (() => {
         case "b":
           this.executeB(operands);
           break;
+        case "cset":
+          this.executeCset(operands);
+          break;
+        case "svc":
+          this.handleSysCall(operands);
+          break;
         default:
           this.pc++;
           break;
+      }
+    }
+    handleSysCall(operands) {
+      if (operands[0] == "#0x80") {
+        this.running = false;
       }
     }
     executeMov(operands) {
@@ -1531,6 +1525,63 @@ var Compiler = (() => {
       } else {
         this.pc++;
       }
+    }
+    executeCset(operands) {
+      const dest = operands[0];
+      const condition = operands[1];
+      const cmpResult = this.registers.get("_cmp_result") || 0n;
+      let conditionMet = false;
+      switch (condition.toLowerCase()) {
+        case "eq":
+          conditionMet = cmpResult === 0n;
+          break;
+        case "ne":
+          conditionMet = cmpResult !== 0n;
+          break;
+        case "lt":
+          conditionMet = cmpResult < 0n;
+          break;
+        case "le":
+          conditionMet = cmpResult <= 0n;
+          break;
+        case "gt":
+          conditionMet = cmpResult > 0n;
+          break;
+        case "ge":
+          conditionMet = cmpResult >= 0n;
+          break;
+        case "cs":
+        // carry set (unsigned >=)
+        case "hs":
+          conditionMet = cmpResult >= 0n;
+          break;
+        case "cc":
+        // carry clear (unsigned <)
+        case "lo":
+          conditionMet = cmpResult < 0n;
+          break;
+        case "mi":
+          conditionMet = cmpResult < 0n;
+          break;
+        case "pl":
+          conditionMet = cmpResult >= 0n;
+          break;
+        case "vs":
+        // overflow set
+        case "vc":
+          conditionMet = false;
+          break;
+        case "hi":
+          conditionMet = cmpResult > 0n;
+          break;
+        case "ls":
+          conditionMet = cmpResult <= 0n;
+          break;
+        default:
+          throw new Error(`Unknown condition code: ${condition}`);
+      }
+      this.setRegister(dest, conditionMet ? 1n : 0n);
+      this.pc++;
     }
     handlePrintf() {
       const value = this.getRegister("x0");
