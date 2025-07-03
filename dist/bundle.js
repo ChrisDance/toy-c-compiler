@@ -9,19 +9,24 @@ var Compiler = (() => {
       __defProp(target, name, { get: all[name], enumerable: true });
   };
   var __copyProps = (to, from, except, desc) => {
-    if (from && typeof from === "object" || typeof from === "function") {
+    if ((from && typeof from === "object") || typeof from === "function") {
       for (let key of __getOwnPropNames(from))
         if (!__hasOwnProp.call(to, key) && key !== except)
-          __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
+          __defProp(to, key, {
+            get: () => from[key],
+            enumerable:
+              !(desc = __getOwnPropDesc(from, key)) || desc.enumerable,
+          });
     }
     return to;
   };
-  var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
+  var __toCommonJS = (mod) =>
+    __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 
   // src/index.ts
   var index_exports = {};
   __export(index_exports, {
-    Compiler: () => Compiler
+    Compiler: () => Compiler,
   });
 
   // src/Lexer.ts
@@ -47,7 +52,7 @@ var Compiler = (() => {
       this.tokens.push({
         type: "EOF" /* EOF */,
         lexeme: "",
-        line: this.line
+        line: this.line,
       });
       return this.tokens;
     }
@@ -83,8 +88,7 @@ var Compiler = (() => {
           break;
         case "/":
           if (this.peek() === "/") {
-            while (this.advance() != "\n") {
-            }
+            while (this.advance() != "\n") {}
           } else {
             this.addToken("DIVIDE" /* DIVIDE */);
           }
@@ -119,7 +123,7 @@ var Compiler = (() => {
             this.identifier();
           } else if (c !== "\0") {
             console.error(
-              `Unexpected character: '${c}' (code ${c.charCodeAt(0)}) at line ${this.line}`
+              `Unexpected character: '${c}' (code ${c.charCodeAt(0)}) at line ${this.line}`,
             );
           }
           break;
@@ -128,7 +132,7 @@ var Compiler = (() => {
     identifier() {
       while (this.isAlphaNumeric(this.peek())) this.advance();
       const text = this.source.substring(this.start, this.current);
-      let type = "IDENTIFIER" /* IDENTIFIER */;
+      let type = "IDENTIFIER"; /* IDENTIFIER */
       if (text === "int") {
         type = "INT" /* INT */;
       } else if (text == "void") {
@@ -152,7 +156,7 @@ var Compiler = (() => {
       }
       this.addToken(
         "NUMBER" /* NUMBER */,
-        parseInt(this.source.substring(this.start, this.current))
+        parseInt(this.source.substring(this.start, this.current)),
       );
     }
     match(expected) {
@@ -170,7 +174,7 @@ var Compiler = (() => {
       return this.source.charAt(this.current + 1);
     }
     isAlpha(c) {
-      return c >= "a" && c <= "z" || c >= "A" && c <= "Z" || c === "_";
+      return (c >= "a" && c <= "z") || (c >= "A" && c <= "Z") || c === "_";
     }
     isAlphaNumeric(c) {
       return this.isAlpha(c) || this.isDigit(c);
@@ -190,7 +194,7 @@ var Compiler = (() => {
         type,
         lexeme: text,
         literal,
-        line: this.line
+        line: this.line,
       });
     }
   };
@@ -219,18 +223,21 @@ var Compiler = (() => {
       }
       return {
         type: "Program" /* Program */,
-        functions
+        functions,
       };
     }
     parseWhileStatement() {
       this.consume("LEFT_PAREN" /* LEFT_PAREN */, "Expect '(' after 'while'.");
       const condition = this.parseExpression();
-      this.consume("RIGHT_PAREN" /* RIGHT_PAREN */, "Expect ')' after while condition.");
+      this.consume(
+        "RIGHT_PAREN" /* RIGHT_PAREN */,
+        "Expect ')' after while condition.",
+      );
       const body = this.parseStatement();
       return {
         type: "WhileStatement" /* WhileStatement */,
         condition,
-        body
+        body,
       };
     }
     parseFunction() {
@@ -243,13 +250,19 @@ var Compiler = (() => {
       } else if (this.match("VOID" /* VOID */)) {
         returnType = "void";
       } else {
-        throw this.error(this.peek(), "Expect return type (int, int*, or void).");
+        throw this.error(
+          this.peek(),
+          "Expect return type (int, int*, or void).",
+        );
       }
       const nameToken = this.consume(
         "IDENTIFIER" /* IDENTIFIER */,
-        "Expect function name."
+        "Expect function name.",
       );
-      this.consume("LEFT_PAREN" /* LEFT_PAREN */, "Expect '(' after function name.");
+      this.consume(
+        "LEFT_PAREN" /* LEFT_PAREN */,
+        "Expect '(' after function name.",
+      );
       const params = [];
       if (!this.check("RIGHT_PAREN" /* RIGHT_PAREN */)) {
         do {
@@ -260,24 +273,30 @@ var Compiler = (() => {
           }
           const paramName = this.consume(
             "IDENTIFIER" /* IDENTIFIER */,
-            "Expect parameter name."
+            "Expect parameter name.",
           );
           params.push({
             type: "Parameter" /* Parameter */,
             name: paramName.lexeme,
-            paramType
+            paramType,
           });
         } while (this.match("COMMA" /* COMMA */));
       }
-      this.consume("RIGHT_PAREN" /* RIGHT_PAREN */, "Expect ')' after parameters.");
-      this.consume("LEFT_BRACE" /* LEFT_BRACE */, "Expect '{' before function body.");
+      this.consume(
+        "RIGHT_PAREN" /* RIGHT_PAREN */,
+        "Expect ')' after parameters.",
+      );
+      this.consume(
+        "LEFT_BRACE" /* LEFT_BRACE */,
+        "Expect '{' before function body.",
+      );
       const body = this.parseBlock();
       return {
         type: "FunctionDeclaration" /* FunctionDeclaration */,
         name: nameToken.lexeme,
         params,
         returnType,
-        body
+        body,
       };
     }
     parseBlock() {
@@ -288,7 +307,7 @@ var Compiler = (() => {
       this.consume("RIGHT_BRACE" /* RIGHT_BRACE */, "Expect '}' after block.");
       return {
         type: "BlockStatement" /* BlockStatement */,
-        statements
+        statements,
       };
     }
     parseStatement() {
@@ -308,7 +327,10 @@ var Compiler = (() => {
       if (this.match("LEFT_BRACE" /* LEFT_BRACE */)) {
         return this.parseBlock();
       }
-      if (this.check("IDENTIFIER" /* IDENTIFIER */) || this.check("MULTIPLY" /* MULTIPLY */)) {
+      if (
+        this.check("IDENTIFIER" /* IDENTIFIER */) ||
+        this.check("MULTIPLY" /* MULTIPLY */)
+      ) {
         const checkpoint = this.current;
         try {
           let target;
@@ -317,7 +339,7 @@ var Compiler = (() => {
             target = {
               type: "UnaryExpression" /* UnaryExpression */,
               operator: "*",
-              operand
+              operand,
             };
           } else {
             const identifier = this.advance();
@@ -325,11 +347,14 @@ var Compiler = (() => {
           }
           if (this.match("EQUAL" /* EQUAL */)) {
             const value = this.parseExpression();
-            this.consume("SEMICOLON" /* SEMICOLON */, "Expect ';' after assignment.");
+            this.consume(
+              "SEMICOLON" /* SEMICOLON */,
+              "Expect ';' after assignment.",
+            );
             return {
               type: "AssignmentStatement" /* AssignmentStatement */,
               target,
-              value
+              value,
             };
           } else {
             this.current = checkpoint;
@@ -345,7 +370,10 @@ var Compiler = (() => {
     parseIfStatement() {
       this.consume("LEFT_PAREN" /* LEFT_PAREN */, "Expect '(' after 'if'.");
       const condition = this.parseExpression();
-      this.consume("RIGHT_PAREN" /* RIGHT_PAREN */, "Expect ')' after if condition.");
+      this.consume(
+        "RIGHT_PAREN" /* RIGHT_PAREN */,
+        "Expect ')' after if condition.",
+      );
       const thenBranch = this.parseStatement();
       let elseBranch = null;
       if (this.match("ELSE" /* ELSE */)) {
@@ -355,7 +383,7 @@ var Compiler = (() => {
         type: "IfStatement" /* IfStatement */,
         condition,
         thenBranch,
-        elseBranch
+        elseBranch,
       };
     }
     parseReturnStatement() {
@@ -365,10 +393,13 @@ var Compiler = (() => {
       } else {
         expression = { type: "VoidExpression" /* VoidExpression */ };
       }
-      this.consume("SEMICOLON" /* SEMICOLON */, "Expect ';' after return statement.");
+      this.consume(
+        "SEMICOLON" /* SEMICOLON */,
+        "Expect ';' after return statement.",
+      );
       return {
         type: "ReturnStatement" /* ReturnStatement */,
-        argument: expression
+        argument: expression,
       };
     }
     parseVariableDeclaration() {
@@ -378,16 +409,19 @@ var Compiler = (() => {
       }
       const name = this.consume(
         "IDENTIFIER" /* IDENTIFIER */,
-        "Expect variable name."
+        "Expect variable name.",
       ).lexeme;
       this.consume("EQUAL" /* EQUAL */, "Expect '=' after variable name.");
       const initializer = this.parseExpression();
-      this.consume("SEMICOLON" /* SEMICOLON */, "Expect ';' after variable declaration.");
+      this.consume(
+        "SEMICOLON" /* SEMICOLON */,
+        "Expect ';' after variable declaration.",
+      );
       return {
         type: "VariableDeclaration" /* VariableDeclaration */,
         name,
         varType,
-        init: initializer
+        init: initializer,
       };
     }
     parseExpressionStatement() {
@@ -395,7 +429,7 @@ var Compiler = (() => {
       this.consume("SEMICOLON" /* SEMICOLON */, "Expect ';' after expression.");
       return {
         type: "ExpressionStatement" /* ExpressionStatement */,
-        expression: expr
+        expression: expr,
       };
     }
     parseExpression() {
@@ -403,18 +437,20 @@ var Compiler = (() => {
     }
     parseComparison() {
       let expr = this.parseAdditive();
-      if (this.match(
-        "LESS_THAN" /* LESS_THAN */,
-        "GREATER_THAN" /* GREATER_THAN */,
-        "EQUAL_EQUAL" /* EQUAL_EQUAL */
-      )) {
+      if (
+        this.match(
+          "LESS_THAN" /* LESS_THAN */,
+          "GREATER_THAN" /* GREATER_THAN */,
+          "EQUAL_EQUAL" /* EQUAL_EQUAL */,
+        )
+      ) {
         const operator = this.previous().lexeme;
         const right = this.parseAdditive();
         expr = {
           type: "BinaryExpression" /* BinaryExpression */,
           operator,
           left: expr,
-          right
+          right,
         };
       }
       return expr;
@@ -428,7 +464,7 @@ var Compiler = (() => {
           type: "BinaryExpression" /* BinaryExpression */,
           operator,
           left: expr,
-          right
+          right,
         };
       }
       return expr;
@@ -442,7 +478,7 @@ var Compiler = (() => {
           type: "BinaryExpression" /* BinaryExpression */,
           operator,
           left: expr,
-          right
+          right,
         };
       }
       return expr;
@@ -454,7 +490,7 @@ var Compiler = (() => {
         return {
           type: "UnaryExpression" /* UnaryExpression */,
           operator,
-          operand
+          operand,
         };
       }
       if (this.match("MULTIPLY" /* MULTIPLY */)) {
@@ -463,7 +499,7 @@ var Compiler = (() => {
         return {
           type: "UnaryExpression" /* UnaryExpression */,
           operator,
-          operand
+          operand,
         };
       }
       return this.parsePrimary();
@@ -472,7 +508,7 @@ var Compiler = (() => {
       if (this.match("NUMBER" /* NUMBER */)) {
         return {
           type: "NumberLiteral" /* NumberLiteral */,
-          value: Number(this.previous().lexeme)
+          value: Number(this.previous().lexeme),
         };
       }
       if (this.match("IDENTIFIER" /* IDENTIFIER */)) {
@@ -484,21 +520,27 @@ var Compiler = (() => {
               args.push(this.parseExpression());
             } while (this.match("COMMA" /* COMMA */));
           }
-          this.consume("RIGHT_PAREN" /* RIGHT_PAREN */, "Expect ')' after arguments.");
+          this.consume(
+            "RIGHT_PAREN" /* RIGHT_PAREN */,
+            "Expect ')' after arguments.",
+          );
           return {
             type: "FunctionCall" /* FunctionCall */,
             callee: name,
-            arguments: args
+            arguments: args,
           };
         }
         return {
           type: "Identifier" /* Identifier */,
-          name
+          name,
         };
       }
       if (this.match("LEFT_PAREN" /* LEFT_PAREN */)) {
         const expr = this.parseExpression();
-        this.consume("RIGHT_PAREN" /* RIGHT_PAREN */, "Expect ')' after expression.");
+        this.consume(
+          "RIGHT_PAREN" /* RIGHT_PAREN */,
+          "Expect ')' after expression.",
+        );
         return expr;
       }
       throw this.error(this.peek(), "Expect expression.");
@@ -534,7 +576,10 @@ var Compiler = (() => {
       throw this.error(this.peek(), message);
     }
     error(token, message) {
-      const errorMsg = token.type === "EOF" /* EOF */ ? `Error at end: ${message}` : `Error at token '${token.lexeme}' on line ${token.line}: ${message}`;
+      const errorMsg =
+        token.type === "EOF" /* EOF */
+          ? `Error at end: ${message}`
+          : `Error at token '${token.lexeme}' on line ${token.line}: ${message}`;
       return new Error(errorMsg);
     }
     validateFunction(func) {
@@ -569,7 +614,9 @@ var Compiler = (() => {
     validateNonVoidReturns(stmt) {
       if (stmt.type === "ReturnStatement" /* ReturnStatement */) {
         const returnStmt = stmt;
-        if (returnStmt.argument.type === "VoidExpression" /* VoidExpression */) {
+        if (
+          returnStmt.argument.type === "VoidExpression" /* VoidExpression */
+        ) {
           throw new Error("Non-void function must return a value");
         }
       } else if (stmt.type === "BlockStatement" /* BlockStatement */) {
@@ -593,16 +640,7 @@ var Compiler = (() => {
   // src/codegen.ts
   var RegisterAllocator = class {
     /* fixed pool of callee-saved registers */
-    availableRegs = [
-      "x8",
-      "x9",
-      "x10",
-      "x11",
-      "x12",
-      "x13",
-      "x14",
-      "x15"
-    ];
+    availableRegs = ["x8", "x9", "x10", "x11", "x12", "x13", "x14", "x15"];
     usedRegs = [];
     /* first-available allocation*/
     allocate() {
@@ -623,7 +661,16 @@ var Compiler = (() => {
     }
     /* per-function reset: real compilers maintain global register state across optimization passes */
     reset() {
-      this.availableRegs = ["x8", "x9", "x10", "x11", "x12", "x13", "x14", "x15"];
+      this.availableRegs = [
+        "x8",
+        "x9",
+        "x10",
+        "x11",
+        "x12",
+        "x13",
+        "x14",
+        "x15",
+      ];
       this.usedRegs = [];
     }
     /* fallback detection for stack-based code generation when no registers are available*/
@@ -652,7 +699,10 @@ var Compiler = (() => {
         const label = this.addStringLiteral(formatString);
         if (args[0].type === "UnaryExpression" /* UnaryExpression */) {
           const unaryExpr = args[0];
-          if (unaryExpr.operator === "&" && unaryExpr.operand.type === "Identifier" /* Identifier */) {
+          if (
+            unaryExpr.operator === "&" &&
+            unaryExpr.operand.type === "Identifier" /* Identifier */
+          ) {
             const varName = unaryExpr.operand.name;
             const offset = this.getVarLocation(this.currentFunction, varName);
             if (offset) {
@@ -665,7 +715,7 @@ var Compiler = (() => {
                 "str x8, [x9]",
                 `adrp x0, ${label}@PAGE`,
                 `add x0, x0, ${label}@PAGEOFF`,
-                "bl _printf"
+                "bl _printf",
               ];
             }
           }
@@ -678,7 +728,7 @@ var Compiler = (() => {
           "str x8, [x9]",
           `adrp x0, ${label}@PAGE`,
           `add x0, x0, ${label}@PAGEOFF`,
-          "bl _printf"
+          "bl _printf",
         ];
       },
       exit: (args) => {
@@ -691,7 +741,7 @@ var Compiler = (() => {
         result.push("	mov	x16, #1");
         result.push("	svc	#0x80");
         return result;
-      }
+      },
     };
     load(ast) {
       this.output = [];
@@ -730,11 +780,14 @@ var Compiler = (() => {
         const offset = this.getVarLocation(this.currentFunction, stmt.target);
         if (!offset) {
           throw new Error(
-            `Variable not found: ${stmt.target} in function ${this.currentFunction}`
+            `Variable not found: ${stmt.target} in function ${this.currentFunction}`,
           );
         }
         this.addLine(`	str	x0, [sp, #${offset}]`);
-      } else if (stmt.target.type === "UnaryExpression" /* UnaryExpression */ && stmt.target.operator === "*") {
+      } else if (
+        stmt.target.type === "UnaryExpression" /* UnaryExpression */ &&
+        stmt.target.operator === "*"
+      ) {
         this.addLine(`	mov	x8, x0`);
         const ptrCode = this.generateExpression(stmt.target.operand);
         this.addLines(ptrCode);
@@ -764,7 +817,9 @@ var Compiler = (() => {
             ifCount += this.countVariablesInStatement(stmt.thenBranch);
           }
           if (stmt.elseBranch) {
-            if (stmt.elseBranch.type === "BlockStatement" /* BlockStatement */) {
+            if (
+              stmt.elseBranch.type === "BlockStatement" /* BlockStatement */
+            ) {
               ifCount += this.countLocalVariables(stmt.elseBranch);
             } else {
               ifCount += this.countVariablesInStatement(stmt.elseBranch);
@@ -796,9 +851,7 @@ var Compiler = (() => {
       this.functionEndLabel = this.generateLabel("function_end");
       this.regAlloc.reset();
       this.nextOffsetMap.set(func.name, 16);
-      this.addLine(
-        `	.globl	_${func.name}					 ; -- Begin function ${func.name}`
-      );
+      this.addLine(`	.globl	_${func.name}					 ; -- Begin function ${func.name}`);
       this.addLine("	.p2align	2");
       this.addLine(`_${func.name}:						 ; @${func.name}`);
       const totalStackSize = this.calculateStackSizeForFunction(func);
@@ -813,7 +866,7 @@ var Compiler = (() => {
           this.addLine(`	str	x${i}, [sp, #${offset}]`);
         } else {
           throw new Error(
-            `Function ${func.name} has more than 8 parameters, which is not supported`
+            `Function ${func.name} has more than 8 parameters, which is not supported`,
           );
         }
       }
@@ -850,7 +903,7 @@ var Compiler = (() => {
           this.setVarLocation(this.currentFunction, stmt.name, offset);
           if (stmt.init.type === "NumberLiteral" /* NumberLiteral */) {
             this.addLine(
-              `	mov	x8, #${stmt.init.value}				; =0x${stmt.init.value.toString(16)}`
+              `	mov	x8, #${stmt.init.value}				; =0x${stmt.init.value.toString(16)}`,
             );
             this.addLine(`	str	x8, [sp, #${offset}]`);
           } else {
@@ -945,7 +998,7 @@ var Compiler = (() => {
           if (expr.operand.type === "Identifier" /* Identifier */) {
             const offset = this.getVarLocation(
               this.currentFunction,
-              expr.operand.name
+              expr.operand.name,
             );
             if (!offset) {
               throw new Error(`Variable not found: ${expr.operand.name}`);
@@ -953,7 +1006,7 @@ var Compiler = (() => {
             result.push(`	add	x0, sp, #${offset}`);
           } else {
             throw new Error(
-              "Address-of operator can only be applied to variables"
+              "Address-of operator can only be applied to variables",
             );
           }
           break;
@@ -1092,7 +1145,7 @@ var Compiler = (() => {
       const offset = this.getVarLocation(this.currentFunction, expr.name);
       if (!offset) {
         throw new Error(
-          `Variable not found: ${expr.name} in function ${this.currentFunction}`
+          `Variable not found: ${expr.name} in function ${this.currentFunction}`,
         );
       }
       return [`	ldr	x0, [sp, #${offset}]`];
@@ -1206,7 +1259,8 @@ var Compiler = (() => {
         return null;
       }
       const commentIndex = trimmed.indexOf(";");
-      const instruction = commentIndex >= 0 ? trimmed.substring(0, commentIndex).trim() : trimmed;
+      const instruction =
+        commentIndex >= 0 ? trimmed.substring(0, commentIndex).trim() : trimmed;
       const parts = instruction.split(/\s+/);
       const opcode = parts[0];
       const operandString = parts.slice(1).join(" ");
@@ -1238,7 +1292,7 @@ var Compiler = (() => {
       return {
         opcode: opcode.toLowerCase(),
         operands,
-        original: line
+        original: line,
       };
     }
     run() {
@@ -1253,7 +1307,11 @@ var Compiler = (() => {
       let stepCount = 0;
       const maxSteps = 1e4;
       try {
-        while (this.running && this.pc < this.instructions.length && stepCount < maxSteps) {
+        while (
+          this.running &&
+          this.pc < this.instructions.length &&
+          stepCount < maxSteps
+        ) {
           this.executeInstruction(this.instructions[this.pc]);
           stepCount++;
         }
@@ -1264,7 +1322,7 @@ var Compiler = (() => {
           success: true,
           output: this.output.join("\n"),
           returnValue: Number(this.registers.get("x0") || 0n),
-          steps: stepCount
+          steps: stepCount,
         };
       } catch (error) {
         return {
@@ -1272,7 +1330,7 @@ var Compiler = (() => {
           output: this.output.join("\n"),
           error: error instanceof Error ? error.message : String(error),
           returnValue: -1,
-          steps: stepCount
+          steps: stepCount,
         };
       }
     }
@@ -1330,7 +1388,6 @@ var Compiler = (() => {
           this.handleSysCall(operands);
           break;
         default:
-          throw new Error("Instruction not implemented");
           this.pc++;
           break;
       }
@@ -1615,7 +1672,7 @@ var Compiler = (() => {
         framePointer: this.framePointer,
         pc: this.pc,
         output: this.output.join("\n"),
-        running: this.running
+        running: this.running,
       };
     }
     reset() {
@@ -1662,7 +1719,7 @@ var Compiler = (() => {
         algebraicSimplification: 0,
         totalOptimizations: 0,
         functionsRemoved: 0,
-        pointersDetected: 0
+        pointersDetected: 0,
       };
       this.constantValues = {};
       this.usedVariables = /* @__PURE__ */ new Set();
@@ -1675,7 +1732,7 @@ var Compiler = (() => {
         constantFolding: 0,
         constantPropagation: 0,
         deadCodeElimination: 0,
-        algebraicSimplification: 0
+        algebraicSimplification: 0,
       };
     }
     /* multi-pass optimization with fixed-point iteration (runs until a pass didn't yield a change)*/
@@ -1683,7 +1740,8 @@ var Compiler = (() => {
       this.resetStats();
       this.detectPointers(this.program);
       if (this.hasPointers) {
-        this.stats.pointersDetected = this.pointerVariables.size + this.pointerReferencedVariables.size;
+        this.stats.pointersDetected =
+          this.pointerVariables.size + this.pointerReferencedVariables.size;
       }
       let passChanged = true;
       while (passChanged && this.stats.passes < maxPasses) {
@@ -1713,15 +1771,24 @@ var Compiler = (() => {
           passChanged = true;
         }
         this.stats.constantFolding += this.currentPassStats.constantFolding;
-        this.stats.constantPropagation += this.currentPassStats.constantPropagation;
-        this.stats.deadCodeElimination += this.currentPassStats.deadCodeElimination;
-        this.stats.algebraicSimplification += this.currentPassStats.algebraicSimplification;
+        this.stats.constantPropagation +=
+          this.currentPassStats.constantPropagation;
+        this.stats.deadCodeElimination +=
+          this.currentPassStats.deadCodeElimination;
+        this.stats.algebraicSimplification +=
+          this.currentPassStats.algebraicSimplification;
       }
-      this.stats.totalOptimizations = this.stats.constantFolding + this.stats.constantPropagation + this.stats.deadCodeElimination + this.stats.algebraicSimplification;
+      this.stats.totalOptimizations =
+        this.stats.constantFolding +
+        this.stats.constantPropagation +
+        this.stats.deadCodeElimination +
+        this.stats.algebraicSimplification;
       if (this.program.functions.length === 0) {
         throw new Error("Program needs at least one function");
       }
-      const mainFunction = this.program.functions.find((f) => f.name === "main");
+      const mainFunction = this.program.functions.find(
+        (f) => f.name === "main",
+      );
       if (!mainFunction) {
         throw new Error("Program needs a main function");
       }
@@ -1735,7 +1802,7 @@ var Compiler = (() => {
         calledFunctions.add(currentFunction.name);
         this.findFunctionCalls(currentFunction).forEach((funcName) => {
           const calledFunc = this.program.functions.find(
-            (f) => f.name === funcName
+            (f) => f.name === funcName,
           );
           if (calledFunc && !calledFunctions.has(funcName)) {
             functionQueue.push(calledFunc);
@@ -1743,11 +1810,14 @@ var Compiler = (() => {
         });
       }
       const originalFunctionCount = this.program.functions.length;
-      const removedFunctions = this.program.functions.filter((f) => !calledFunctions.has(f.name)).map((f) => f.name);
-      this.program.functions = this.program.functions.filter(
-        (f) => calledFunctions.has(f.name)
+      const removedFunctions = this.program.functions
+        .filter((f) => !calledFunctions.has(f.name))
+        .map((f) => f.name);
+      this.program.functions = this.program.functions.filter((f) =>
+        calledFunctions.has(f.name),
       );
-      this.stats.functionsRemoved = originalFunctionCount - calledFunctions.size;
+      this.stats.functionsRemoved =
+        originalFunctionCount - calledFunctions.size;
       return { asm: this.program, stats: { ...this.stats } };
     }
     detectPointers(program) {
@@ -1788,9 +1858,7 @@ var Compiler = (() => {
           this.detectPointersInExpression(assignment.value);
           break;
         case "ExpressionStatement" /* ExpressionStatement */:
-          this.detectPointersInExpression(
-            stmt.expression
-          );
+          this.detectPointersInExpression(stmt.expression);
           break;
         case "ReturnStatement" /* ReturnStatement */:
           this.detectPointersInExpression(stmt.argument);
@@ -1862,11 +1930,14 @@ var Compiler = (() => {
           return unaryExpr.operator === "&" || unaryExpr.operator === "*";
         case "BinaryExpression" /* BinaryExpression */:
           const binExpr = expr;
-          return this.containsPointerOperations(binExpr.left) || this.containsPointerOperations(binExpr.right);
+          return (
+            this.containsPointerOperations(binExpr.left) ||
+            this.containsPointerOperations(binExpr.right)
+          );
         case "FunctionCall" /* FunctionCall */:
           const funcCall = expr;
-          return funcCall.arguments.some(
-            (arg) => this.containsPointerOperations(arg)
+          return funcCall.arguments.some((arg) =>
+            this.containsPointerOperations(arg),
           );
         case "Identifier" /* Identifier */:
           const id = expr;
@@ -1879,7 +1950,10 @@ var Compiler = (() => {
       switch (stmt.type) {
         case "VariableDeclaration" /* VariableDeclaration */:
           const varDecl = stmt;
-          return varDecl.varType.includes("*") || this.containsPointerOperations(varDecl.init);
+          return (
+            varDecl.varType.includes("*") ||
+            this.containsPointerOperations(varDecl.init)
+          );
         case "AssignmentStatement" /* AssignmentStatement */:
           const assignment = stmt;
           if (typeof assignment.target !== "string") {
@@ -1890,13 +1964,9 @@ var Compiler = (() => {
           }
           return this.containsPointerOperations(assignment.value);
         case "ExpressionStatement" /* ExpressionStatement */:
-          return this.containsPointerOperations(
-            stmt.expression
-          );
+          return this.containsPointerOperations(stmt.expression);
         case "ReturnStatement" /* ReturnStatement */:
-          return this.containsPointerOperations(
-            stmt.argument
-          );
+          return this.containsPointerOperations(stmt.argument);
         case "IfStatement" /* IfStatement */:
           const ifStmt = stmt;
           return this.containsPointerOperations(ifStmt.condition);
@@ -1961,13 +2031,13 @@ var Compiler = (() => {
     runDeadCodeElimination(program) {
       return {
         type: "Program" /* Program */,
-        functions: program.functions.map((func) => this.dceFunction(func))
+        functions: program.functions.map((func) => this.dceFunction(func)),
       };
     }
     dceFunction(func) {
       return {
         ...func,
-        body: this.dceBlock(func.body)
+        body: this.dceBlock(func.body),
       };
     }
     dceBlock(block) {
@@ -1989,7 +2059,7 @@ var Compiler = (() => {
       }
       return {
         type: "BlockStatement" /* BlockStatement */,
-        statements
+        statements,
       };
     }
     dceStatement(stmt) {
@@ -1999,7 +2069,11 @@ var Compiler = (() => {
       switch (stmt.type) {
         case "VariableDeclaration" /* VariableDeclaration */:
           const varDecl = stmt;
-          if (!this.usedVariables.has(varDecl.name) && !this.hasSideEffects(varDecl.init) && this.canOptimizeVariable(varDecl.name)) {
+          if (
+            !this.usedVariables.has(varDecl.name) &&
+            !this.hasSideEffects(varDecl.init) &&
+            this.canOptimizeVariable(varDecl.name)
+          ) {
             this.currentPassStats.deadCodeElimination++;
             this.phaseChanged = true;
             return null;
@@ -2007,7 +2081,12 @@ var Compiler = (() => {
           return stmt;
         case "AssignmentStatement" /* AssignmentStatement */:
           const assignment = stmt;
-          if (typeof assignment.target === "string" && !this.usedVariables.has(assignment.target) && !this.hasSideEffects(assignment.value) && this.canOptimizeVariable(assignment.target)) {
+          if (
+            typeof assignment.target === "string" &&
+            !this.usedVariables.has(assignment.target) &&
+            !this.hasSideEffects(assignment.value) &&
+            this.canOptimizeVariable(assignment.target)
+          ) {
             this.currentPassStats.deadCodeElimination++;
             this.phaseChanged = true;
             return null;
@@ -2016,18 +2095,28 @@ var Compiler = (() => {
         case "IfStatement" /* IfStatement */:
           const ifStmt = stmt;
           const condition = ifStmt.condition;
-          if (condition.type === "NumberLiteral" /* NumberLiteral */ && !this.containsPointerOperations(condition)) {
+          if (
+            condition.type === "NumberLiteral" /* NumberLiteral */ &&
+            !this.containsPointerOperations(condition)
+          ) {
             const condValue = condition.value;
             this.currentPassStats.deadCodeElimination++;
             this.phaseChanged = true;
             if (condValue !== 0) {
               return this.cfStatement(ifStmt.thenBranch);
             } else {
-              return ifStmt.elseBranch ? this.cfStatement(ifStmt.elseBranch) : { type: "BlockStatement" /* BlockStatement */, statements: [] };
+              return ifStmt.elseBranch
+                ? this.cfStatement(ifStmt.elseBranch)
+                : {
+                    type: "BlockStatement" /* BlockStatement */,
+                    statements: [],
+                  };
             }
           }
           const thenBranch = this.dceStatement(ifStmt.thenBranch);
-          const elseBranch = ifStmt.elseBranch ? this.dceStatement(ifStmt.elseBranch) : null;
+          const elseBranch = ifStmt.elseBranch
+            ? this.dceStatement(ifStmt.elseBranch)
+            : null;
           if (!thenBranch && !elseBranch) {
             return null;
           }
@@ -2035,9 +2124,9 @@ var Compiler = (() => {
             ...ifStmt,
             thenBranch: thenBranch || {
               type: "BlockStatement" /* BlockStatement */,
-              statements: []
+              statements: [],
             },
-            elseBranch
+            elseBranch,
           };
         case "WhileStatement" /* WhileStatement */:
           const whileStmt = stmt;
@@ -2047,7 +2136,7 @@ var Compiler = (() => {
           }
           return {
             ...whileStmt,
-            body
+            body,
           };
         case "BlockStatement" /* BlockStatement */:
           return this.dceBlock(stmt);
@@ -2066,20 +2155,20 @@ var Compiler = (() => {
     runConstantPropagation(program) {
       return {
         type: "Program" /* Program */,
-        functions: program.functions.map((func) => this.cpFunction(func))
+        functions: program.functions.map((func) => this.cpFunction(func)),
       };
     }
     cpFunction(func) {
       this.constantValues = {};
       return {
         ...func,
-        body: this.cpBlock(func.body)
+        body: this.cpBlock(func.body),
       };
     }
     cpBlock(block) {
       return {
         type: "BlockStatement" /* BlockStatement */,
-        statements: block.statements.map((stmt) => this.cpStatement(stmt))
+        statements: block.statements.map((stmt) => this.cpStatement(stmt)),
       };
     }
     cpStatement(stmt) {
@@ -2090,18 +2179,24 @@ var Compiler = (() => {
         case "VariableDeclaration" /* VariableDeclaration */: {
           const varDecl = stmt;
           const init = this.cpExpression(varDecl.init);
-          if (init.type === "NumberLiteral" /* NumberLiteral */ && this.canOptimizeVariable(varDecl.name)) {
+          if (
+            init.type === "NumberLiteral" /* NumberLiteral */ &&
+            this.canOptimizeVariable(varDecl.name)
+          ) {
             this.constantValues[varDecl.name] = init.value;
           }
           return {
             ...varDecl,
-            init
+            init,
           };
         }
         case "AssignmentStatement" /* AssignmentStatement */:
           const assignment = stmt;
           const value = this.cpExpression(assignment.value);
-          if (typeof assignment.target === "string" && this.canOptimizeVariable(assignment.target)) {
+          if (
+            typeof assignment.target === "string" &&
+            this.canOptimizeVariable(assignment.target)
+          ) {
             if (value.type === "NumberLiteral" /* NumberLiteral */) {
               this.constantValues[assignment.target] = value.value;
             } else {
@@ -2110,7 +2205,7 @@ var Compiler = (() => {
           }
           return {
             ...assignment,
-            value
+            value,
           };
         case "IfStatement" /* IfStatement */: {
           const ifStmt = stmt;
@@ -2122,26 +2217,44 @@ var Compiler = (() => {
             if (condValue !== 0) {
               return this.cpStatement(ifStmt.thenBranch);
             } else {
-              return ifStmt.elseBranch ? this.cpStatement(ifStmt.elseBranch) : { type: "BlockStatement" /* BlockStatement */, statements: [] };
+              return ifStmt.elseBranch
+                ? this.cpStatement(ifStmt.elseBranch)
+                : {
+                    type: "BlockStatement" /* BlockStatement */,
+                    statements: [],
+                  };
             }
           }
           const savedConstants2 = { ...this.constantValues };
           const thenBranch = this.cpStatement(ifStmt.thenBranch);
           const thenConstants = { ...this.constantValues };
           this.constantValues = { ...savedConstants2 };
-          const elseBranch = ifStmt.elseBranch ? this.cpStatement(ifStmt.elseBranch) : null;
+          const elseBranch = ifStmt.elseBranch
+            ? this.cpStatement(ifStmt.elseBranch)
+            : null;
           const elseConstants = { ...this.constantValues };
           this.constantValues = {};
           for (const varName in savedConstants2) {
             const originalValue = savedConstants2[varName];
             const thenValue = thenConstants[varName];
             const elseValue = elseConstants[varName];
-            if (thenValue !== void 0 && elseValue !== void 0 && thenValue === elseValue) {
+            if (
+              thenValue !== void 0 &&
+              elseValue !== void 0 &&
+              thenValue === elseValue
+            ) {
               this.constantValues[varName] = thenValue;
-            } else if (!ifStmt.elseBranch && thenValue !== void 0 && thenValue === originalValue) {
+            } else if (
+              !ifStmt.elseBranch &&
+              thenValue !== void 0 &&
+              thenValue === originalValue
+            ) {
               this.constantValues[varName] = originalValue;
             } else if (!ifStmt.elseBranch && originalValue !== void 0) {
-              if (!(varName in thenConstants) || thenConstants[varName] === originalValue) {
+              if (
+                !(varName in thenConstants) ||
+                thenConstants[varName] === originalValue
+              ) {
                 this.constantValues[varName] = originalValue;
               }
             }
@@ -2150,14 +2263,14 @@ var Compiler = (() => {
             ...ifStmt,
             condition: condition2,
             thenBranch,
-            elseBranch
+            elseBranch,
           };
         }
         case "WhileStatement" /* WhileStatement */:
           const whileStmt = stmt;
           const modifiedVars = this.getModifiedVariables(whileStmt.body);
           const conditionVars = this.getVariablesInExpression(
-            whileStmt.condition
+            whileStmt.condition,
           );
           const savedConstants = {};
           for (const condVar of conditionVars) {
@@ -2176,19 +2289,19 @@ var Compiler = (() => {
           return {
             ...whileStmt,
             condition,
-            body
+            body,
           };
         case "ReturnStatement" /* ReturnStatement */:
           const returnStmt = stmt;
           return {
             ...returnStmt,
-            argument: this.cpExpression(returnStmt.argument)
+            argument: this.cpExpression(returnStmt.argument),
           };
         case "ExpressionStatement" /* ExpressionStatement */:
           const exprStmt = stmt;
           return {
             ...exprStmt,
-            expression: this.cpExpression(exprStmt.expression)
+            expression: this.cpExpression(exprStmt.expression),
           };
         case "BlockStatement" /* BlockStatement */:
           return this.cpBlock(stmt);
@@ -2203,12 +2316,16 @@ var Compiler = (() => {
       switch (expr.type) {
         case "Identifier" /* Identifier */:
           const id = expr;
-          if (this.constantValues.hasOwnProperty(id.name) && this.constantValues[id.name] !== void 0 && this.canOptimizeVariable(id.name)) {
+          if (
+            this.constantValues.hasOwnProperty(id.name) &&
+            this.constantValues[id.name] !== void 0 &&
+            this.canOptimizeVariable(id.name)
+          ) {
             this.currentPassStats.constantPropagation++;
             this.phaseChanged = true;
             return {
               type: "NumberLiteral" /* NumberLiteral */,
-              value: this.constantValues[id.name]
+              value: this.constantValues[id.name],
             };
           }
           return expr;
@@ -2217,13 +2334,13 @@ var Compiler = (() => {
           return {
             ...binExpr,
             left: this.cpExpression(binExpr.left),
-            right: this.cpExpression(binExpr.right)
+            right: this.cpExpression(binExpr.right),
           };
         case "FunctionCall" /* FunctionCall */:
           const funcCall = expr;
           return {
             ...funcCall,
-            arguments: funcCall.arguments.map((arg) => this.cpExpression(arg))
+            arguments: funcCall.arguments.map((arg) => this.cpExpression(arg)),
           };
         default:
           return expr;
@@ -2232,19 +2349,19 @@ var Compiler = (() => {
     runConstantFolding(program) {
       return {
         type: "Program" /* Program */,
-        functions: program.functions.map((func) => this.cfFunction(func))
+        functions: program.functions.map((func) => this.cfFunction(func)),
       };
     }
     cfFunction(func) {
       return {
         ...func,
-        body: this.cfBlock(func.body)
+        body: this.cfBlock(func.body),
       };
     }
     cfBlock(block) {
       return {
         type: "BlockStatement" /* BlockStatement */,
-        statements: block.statements.map((stmt) => this.cfStatement(stmt))
+        statements: block.statements.map((stmt) => this.cfStatement(stmt)),
       };
     }
     cfStatement(stmt) {
@@ -2256,13 +2373,13 @@ var Compiler = (() => {
           const varDecl = stmt;
           return {
             ...varDecl,
-            init: this.cfExpression(varDecl.init)
+            init: this.cfExpression(varDecl.init),
           };
         case "AssignmentStatement" /* AssignmentStatement */:
           const assignment = stmt;
           return {
             ...assignment,
-            value: this.cfExpression(assignment.value)
+            value: this.cfExpression(assignment.value),
           };
         case "IfStatement" /* IfStatement */:
           const ifStmt = stmt;
@@ -2271,7 +2388,9 @@ var Compiler = (() => {
             ...ifStmt,
             condition,
             thenBranch: this.cfStatement(ifStmt.thenBranch),
-            elseBranch: ifStmt.elseBranch ? this.cfStatement(ifStmt.elseBranch) : null
+            elseBranch: ifStmt.elseBranch
+              ? this.cfStatement(ifStmt.elseBranch)
+              : null,
           };
         case "WhileStatement" /* WhileStatement */:
           const whileStmt = stmt;
@@ -2284,30 +2403,36 @@ var Compiler = (() => {
             }
           }
           const whileCondition = this.cfExpression(whileStmt.condition);
-          if (whileCondition.type === "NumberLiteral" /* NumberLiteral */ && !this.containsPointerOperations(whileCondition)) {
+          if (
+            whileCondition.type === "NumberLiteral" /* NumberLiteral */ &&
+            !this.containsPointerOperations(whileCondition)
+          ) {
             const condValue = whileCondition.value;
             if (condValue === 0) {
               this.currentPassStats.deadCodeElimination++;
               this.phaseChanged = true;
-              return { type: "BlockStatement" /* BlockStatement */, statements: [] };
+              return {
+                type: "BlockStatement" /* BlockStatement */,
+                statements: [],
+              };
             }
           }
           return {
             ...whileStmt,
             condition: whileCondition,
-            body: this.cfStatement(whileStmt.body)
+            body: this.cfStatement(whileStmt.body),
           };
         case "ReturnStatement" /* ReturnStatement */:
           const returnStmt = stmt;
           return {
             ...returnStmt,
-            argument: this.cfExpression(returnStmt.argument)
+            argument: this.cfExpression(returnStmt.argument),
           };
         case "ExpressionStatement" /* ExpressionStatement */:
           const exprStmt = stmt;
           return {
             ...exprStmt,
-            expression: this.cfExpression(exprStmt.expression)
+            expression: this.cfExpression(exprStmt.expression),
           };
         case "BlockStatement" /* BlockStatement */:
           return this.cfBlock(stmt);
@@ -2327,12 +2452,15 @@ var Compiler = (() => {
           const simplified = this.algebraicSimplify(
             binExpr.operator,
             left,
-            right
+            right,
           );
           if (simplified) {
             return simplified;
           }
-          if (left.type === "NumberLiteral" /* NumberLiteral */ && right.type === "NumberLiteral" /* NumberLiteral */) {
+          if (
+            left.type === "NumberLiteral" /* NumberLiteral */ &&
+            right.type === "NumberLiteral" /* NumberLiteral */
+          ) {
             const leftVal = left.value;
             const rightVal = right.value;
             let result;
@@ -2373,39 +2501,65 @@ var Compiler = (() => {
           const funcCall = expr;
           return {
             ...funcCall,
-            arguments: funcCall.arguments.map((arg) => this.cfExpression(arg))
+            arguments: funcCall.arguments.map((arg) => this.cfExpression(arg)),
           };
         default:
           return expr;
       }
     }
     algebraicSimplify(operator, left, right) {
-      if ((operator === "+" || operator === "-") && right.type === "NumberLiteral" /* NumberLiteral */ && right.value === 0) {
+      if (
+        (operator === "+" || operator === "-") &&
+        right.type === "NumberLiteral" /* NumberLiteral */ &&
+        right.value === 0
+      ) {
         this.currentPassStats.algebraicSimplification++;
         this.phaseChanged = true;
         return left;
       }
-      if (operator === "+" && left.type === "NumberLiteral" /* NumberLiteral */ && left.value === 0) {
+      if (
+        operator === "+" &&
+        left.type === "NumberLiteral" /* NumberLiteral */ &&
+        left.value === 0
+      ) {
         this.currentPassStats.algebraicSimplification++;
         this.phaseChanged = true;
         return right;
       }
-      if (operator === "*" && right.type === "NumberLiteral" /* NumberLiteral */ && right.value === 1) {
+      if (
+        operator === "*" &&
+        right.type === "NumberLiteral" /* NumberLiteral */ &&
+        right.value === 1
+      ) {
         this.currentPassStats.algebraicSimplification++;
         this.phaseChanged = true;
         return left;
       }
-      if (operator === "*" && left.type === "NumberLiteral" /* NumberLiteral */ && left.value === 1) {
+      if (
+        operator === "*" &&
+        left.type === "NumberLiteral" /* NumberLiteral */ &&
+        left.value === 1
+      ) {
         this.currentPassStats.algebraicSimplification++;
         this.phaseChanged = true;
         return right;
       }
-      if (operator === "*" && (left.type === "NumberLiteral" /* NumberLiteral */ && left.value === 0 || right.type === "NumberLiteral" /* NumberLiteral */ && right.value === 0)) {
+      if (
+        operator === "*" &&
+        ((left.type === "NumberLiteral" /* NumberLiteral */ &&
+          left.value === 0) ||
+          (right.type === "NumberLiteral" /* NumberLiteral */ &&
+            right.value === 0))
+      ) {
         this.currentPassStats.algebraicSimplification++;
         this.phaseChanged = true;
         return { type: "NumberLiteral" /* NumberLiteral */, value: 0 };
       }
-      if (operator === "/" && right.type === "NumberLiteral" /* NumberLiteral */ && right.value === 1) {
+      if (
+        operator === "/" &&
+        right.type === "NumberLiteral" /* NumberLiteral */ &&
+        right.value === 1
+      ) {
         this.currentPassStats.algebraicSimplification++;
         this.phaseChanged = true;
         return left;
@@ -2428,14 +2582,10 @@ var Compiler = (() => {
     collectUsedVariablesInStatement(stmt) {
       switch (stmt.type) {
         case "ExpressionStatement" /* ExpressionStatement */:
-          this.collectUsedVariablesInExpression(
-            stmt.expression
-          );
+          this.collectUsedVariablesInExpression(stmt.expression);
           break;
         case "ReturnStatement" /* ReturnStatement */:
-          this.collectUsedVariablesInExpression(
-            stmt.argument
-          );
+          this.collectUsedVariablesInExpression(stmt.argument);
           break;
         case "IfStatement" /* IfStatement */:
           const ifStmt = stmt;
@@ -2454,14 +2604,10 @@ var Compiler = (() => {
           this.collectUsedVariablesInBlock(stmt);
           break;
         case "AssignmentStatement" /* AssignmentStatement */:
-          this.collectUsedVariablesInExpression(
-            stmt.value
-          );
+          this.collectUsedVariablesInExpression(stmt.value);
           break;
         case "VariableDeclaration" /* VariableDeclaration */:
-          this.collectUsedVariablesInExpression(
-            stmt.init
-          );
+          this.collectUsedVariablesInExpression(stmt.init);
           break;
       }
     }
@@ -2493,7 +2639,7 @@ var Compiler = (() => {
         case "FunctionCall" /* FunctionCall */:
           const funcCall = expr;
           const calledFunction = this.program.functions.find(
-            (f) => f.name === funcCall.callee
+            (f) => f.name === funcCall.callee,
           );
           if (calledFunction) {
             if (this.isPureUserFunction(calledFunction)) {
@@ -2506,7 +2652,10 @@ var Compiler = (() => {
           return true;
         case "BinaryExpression" /* BinaryExpression */:
           const binExpr = expr;
-          return this.hasSideEffects(binExpr.left) || this.hasSideEffects(binExpr.right);
+          return (
+            this.hasSideEffects(binExpr.left) ||
+            this.hasSideEffects(binExpr.right)
+          );
         case "UnaryExpression" /* UnaryExpression */:
           const unaryExpr = expr;
           return this.hasSideEffects(unaryExpr.operand);
@@ -2528,8 +2677,8 @@ var Compiler = (() => {
       switch (stmt.type) {
         case "BlockStatement" /* BlockStatement */:
           const block = stmt;
-          return block.statements.every(
-            (s) => this.containsOnlyPureOperations(s)
+          return block.statements.every((s) =>
+            this.containsOnlyPureOperations(s),
           );
         case "ReturnStatement" /* ReturnStatement */:
           const returnStmt = stmt;
@@ -2539,10 +2688,18 @@ var Compiler = (() => {
           return !this.hasSideEffects(varDecl.init);
         case "AssignmentStatement" /* AssignmentStatement */:
           const assignment = stmt;
-          return typeof assignment.target === "string" && !this.hasSideEffects(assignment.value);
+          return (
+            typeof assignment.target === "string" &&
+            !this.hasSideEffects(assignment.value)
+          );
         case "IfStatement" /* IfStatement */:
           const ifStmt = stmt;
-          return !this.hasSideEffects(ifStmt.condition) && this.containsOnlyPureOperations(ifStmt.thenBranch) && (!ifStmt.elseBranch || this.containsOnlyPureOperations(ifStmt.elseBranch));
+          return (
+            !this.hasSideEffects(ifStmt.condition) &&
+            this.containsOnlyPureOperations(ifStmt.thenBranch) &&
+            (!ifStmt.elseBranch ||
+              this.containsOnlyPureOperations(ifStmt.elseBranch))
+          );
         case "ExpressionStatement" /* ExpressionStatement */:
           return !this.hasSideEffects(stmt.expression);
         default:
