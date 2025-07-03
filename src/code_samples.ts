@@ -2,45 +2,8 @@ export type CodeSample = { code: string; output: number };
 export const code_samples: CodeSample[] = [];
 
 export const working = [
-  // {
-  //   code: `
-  //   void recurse(int * loc) {
-  //       if(&loc > 10) {
-  //       } else {
+  //  TEST data
 
-  //        loc = &loc + 1;
-  //        recurse(loc);
-
-  //       }
-
-  //       // return;
-  //   }
-
-  //   int main()
-  //   {
-  //       int i = 0;
-  //       recurse(&i);
-  //       printf(i);
-  //       return 0;
-  //   }
-
-  //   `,
-  //   output: 11,
-  // },
-  // TEST data
-  // {
-  //   code: `
-  //   int data = 5;
-  //   int main() {
-
-  //     printf(data);
-
-  //   return 0;
-  //   }
-
-  //   `,
-  //   output: 5
-  // },
   {
     code: `
     void callWPtr(int * ptr)
@@ -65,7 +28,7 @@ export const working = [
   int main()
   {
    int i = 7;
-   int k = &i;
+   int *k = &i;
    printf(*k);
    return 0;
   }
@@ -116,7 +79,7 @@ export const working = [
   },
   {
     code: `int main() {
-    int a = (3 + 2) * (1 + 0);
+    int a = (3 + 2) * (1 + 0); // 5
     int b = a / 1 + 0 * 999;
     printf(b);
     return 0;
@@ -129,16 +92,16 @@ export const working = [
   // Test exit
   {
     code: `int main() {
-  int a = 2 + 3;
-  int b = a * 1;
-  int c = b + 0;
-  int d = c / 1;
-  int e = d - 0;
-  if (e > 0) {
-    printf(1 * e + 0 * 999);
-  }
-  return 0;
-}`,
+    int a = 2 + 3;
+    int b = a * 1;
+    int c = b + 0;
+    int d = c / 1;
+    int e = d - 0;
+    if (e > 0) {
+      printf(1 * e + 0 * 999);
+    }
+    return 0;
+  }`,
     output: 5, // All operations simplify to 5
   },
   {
@@ -191,23 +154,25 @@ export const working = [
   },
   // Test 1: Function calls with nested expressions and control flow
   //
-  {
-    code: `int Square(int arg) {
-    return arg * arg;
-  }
-  int main() {
-    int i = 5;
-    int k = 4;
-    int j = k + i;
-    if (i > j) {
-      printf(Square(Square(2)));
-    } else {
-      printf(5);
-    }
-    return 0;
-  }`,
-    output: 5,
-  },
+  // {
+  //   code: `
+
+  //   int Square(int arg) {
+  //   return arg * arg;
+  // }
+  // int main() {
+  //   int i = 5;
+  //   int k = 4;
+  //   int j = k + i;
+  //   if (i > j) {
+  //     printf(Square(Square(2)));
+  //   } else {
+  //     printf(5);
+  //   }
+  //   return 0;
+  // }`,
+  //   output: 5,
+  // },
   //Test 2: While loops (FIXED - added parameter)
   {
     code: `

@@ -639,12 +639,29 @@ var Compiler = (() => {
     /* Hard-coded external function implementations - avoids implementing a full linker */
     /* Real compilers generate symbol references resolved at link time */
     specialFunctions = {
+      // Fixed printf special function handling
       printf: (args) => {
         const formatString = "%ld\\n";
         const label = this.addStringLiteral(formatString);
         if (args[0].type === "UnaryExpression") {
           const unaryExpr = args[0];
           if (unaryExpr.operator === "&" && unaryExpr.operand.type === "Identifier") {
+            const varName = unaryExpr.operand.name;
+            const offset = this.getVarLocation(this.currentFunction, varName);
+            if (offset) {
+              return [
+                /* Load the address directly - no dereferencing needed */
+                `	add	x0, sp, #${offset}`,
+                /* ARM64 calling convention setup for variadic functions */
+                "mov x9, sp",
+                "mov x8, x0",
+                "str x8, [x9]",
+                `adrp x0, ${label}@PAGE`,
+                `add x0, x0, ${label}@PAGEOFF`,
+                "bl _printf"
+              ];
+            }
+          } else if (unaryExpr.operator === "*" && unaryExpr.operand.type === "Identifier") {
             const varName = unaryExpr.operand.name;
             const offset = this.getVarLocation(this.currentFunction, varName);
             if (offset) {
@@ -1225,10 +1242,35 @@ var Compiler = (() => {
       const instruction = commentIndex >= 0 ? trimmed.substring(0, commentIndex).trim() : trimmed;
       const parts = instruction.split(/\s+/);
       const opcode = parts[0];
-      const operands = parts.slice(1).join(" ").split(",").map((op) => op.trim());
+      const operandString = parts.slice(1).join(" ");
+      const operands = [];
+      let current = "";
+      let inBrackets = false;
+      let i = 0;
+      while (i < operandString.length) {
+        const char = operandString[i];
+        if (char === "[") {
+          inBrackets = true;
+          current += char;
+        } else if (char === "]") {
+          inBrackets = false;
+          current += char;
+        } else if (char === "," && !inBrackets) {
+          if (current.trim()) {
+            operands.push(current.trim());
+          }
+          current = "";
+        } else {
+          current += char;
+        }
+        i++;
+      }
+      if (current.trim()) {
+        operands.push(current.trim());
+      }
       return {
         opcode: opcode.toLowerCase(),
-        operands: operands.filter((op) => op !== ""),
+        operands,
         original: line
       };
     }
@@ -1306,12 +1348,12 @@ var Compiler = (() => {
         case "cmp":
           this.executeCmp(operands);
           break;
-        case "b.eq":
-        case "b.ne":
-        case "b.lt":
-        case "b.le":
-        case "b.gt":
-        case "b.ge":
+        case "beq":
+        case "bne":
+        case "blt":
+        case "ble":
+        case "bgt":
+        case "bge":
           this.executeBranch(opcode, operands);
           break;
         case "b":
@@ -1453,22 +1495,22 @@ var Compiler = (() => {
       const cmpResult = this.registers.get("_cmp_result") || 0n;
       let shouldBranch = false;
       switch (opcode) {
-        case "b.eq":
+        case "beq":
           shouldBranch = cmpResult === 0n;
           break;
-        case "b.ne":
+        case "bne":
           shouldBranch = cmpResult !== 0n;
           break;
-        case "b.lt":
+        case "blt":
           shouldBranch = cmpResult < 0n;
           break;
-        case "b.le":
+        case "ble":
           shouldBranch = cmpResult <= 0n;
           break;
-        case "b.gt":
+        case "bgt":
           shouldBranch = cmpResult > 0n;
           break;
-        case "b.ge":
+        case "bge":
           shouldBranch = cmpResult >= 0n;
           break;
       }

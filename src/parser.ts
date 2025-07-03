@@ -13,7 +13,7 @@ export enum NodeType {
   WhileStatement = "WhileStatement",
   FunctionCall = "FunctionCall",
   BinaryExpression = "BinaryExpression",
-  UnaryExpression = "UnaryExpression", // New: for address-of (&) and dereference (*)
+  UnaryExpression = "UnaryExpression",
   Identifier = "Identifier",
   NumberLiteral = "NumberLiteral",
   VoidExpression = "VoidExpression",
@@ -25,7 +25,7 @@ export interface Node {
 
 export interface AssignmentStatement extends Node {
   type: NodeType.AssignmentStatement;
-  target: string | UnaryExpression; // Variable name or dereferenced pointer (*ptr)
+  target: string | UnaryExpression;
   value: Expression;
 }
 
@@ -45,7 +45,7 @@ export interface FunctionDeclaration extends Node {
 export interface Parameter extends Node {
   type: NodeType.Parameter;
   name: string;
-  paramType: string; // Now supports "int" and "int*"
+  paramType: string;
 }
 
 export interface WhileStatement extends Node {
@@ -77,7 +77,7 @@ export interface ReturnStatement extends Node {
 export interface VariableDeclaration extends Node {
   type: NodeType.VariableDeclaration;
   name: string;
-  varType: string; // Now supports "int" and "int*"
+  varType: string;
   init: Expression;
 }
 
@@ -108,10 +108,9 @@ export interface BinaryExpression extends Node {
   right: Expression;
 }
 
-// New: UnaryExpression for address-of (&) and dereference (*) operations
 export interface UnaryExpression extends Node {
   type: NodeType.UnaryExpression;
-  operator: string; // "&" for address-of, "*" for dereference
+  operator: string;
   operand: Expression;
 }
 

@@ -122,15 +122,44 @@ export class ARM64Interpreter {
 
     const parts = instruction.split(/\s+/);
     const opcode = parts[0];
-    const operands = parts
-      .slice(1)
-      .join(" ")
-      .split(",")
-      .map((op) => op.trim());
+
+    // Handle operands more carefully - don't split on commas inside brackets
+    const operandString = parts.slice(1).join(" ");
+    const operands: string[] = [];
+
+    let current = "";
+    let inBrackets = false;
+    let i = 0;
+
+    while (i < operandString.length) {
+      const char = operandString[i];
+
+      if (char === "[") {
+        inBrackets = true;
+        current += char;
+      } else if (char === "]") {
+        inBrackets = false;
+        current += char;
+      } else if (char === "," && !inBrackets) {
+        if (current.trim()) {
+          operands.push(current.trim());
+        }
+        current = "";
+      } else {
+        current += char;
+      }
+
+      i++;
+    }
+
+    // Add the last operand
+    if (current.trim()) {
+      operands.push(current.trim());
+    }
 
     return {
       opcode: opcode.toLowerCase(),
-      operands: operands.filter((op) => op !== ""),
+      operands: operands,
       original: line,
     };
   }
@@ -221,17 +250,21 @@ export class ARM64Interpreter {
       case "cmp":
         this.executeCmp(operands);
         break;
-      case "b.eq":
-      case "b.ne":
-      case "b.lt":
-      case "b.le":
-      case "b.gt":
-      case "b.ge":
+      case "beq":
+      case "bne":
+      case "blt":
+      case "ble":
+      case "bgt":
+      case "bge":
         this.executeBranch(opcode, operands);
         break;
       case "b":
         this.executeB(operands);
         break;
+      case "cset":
+        this.executeCset(operands);
+        break;
+
       default:
         // Silently ignore unknown instructions for now
         this.pc++;
@@ -417,22 +450,22 @@ export class ARM64Interpreter {
     let shouldBranch = false;
 
     switch (opcode) {
-      case "b.eq":
+      case "beq":
         shouldBranch = cmpResult === 0n;
         break;
-      case "b.ne":
+      case "bne":
         shouldBranch = cmpResult !== 0n;
         break;
-      case "b.lt":
+      case "blt":
         shouldBranch = cmpResult < 0n;
         break;
-      case "b.le":
+      case "ble":
         shouldBranch = cmpResult <= 0n;
         break;
-      case "b.gt":
+      case "bgt":
         shouldBranch = cmpResult > 0n;
         break;
-      case "b.ge":
+      case "bge":
         shouldBranch = cmpResult >= 0n;
         break;
     }
@@ -457,6 +490,67 @@ export class ARM64Interpreter {
     } else {
       this.pc++;
     }
+  }
+
+  private executeCset(operands: string[]): void {
+    const dest = operands[0];
+    const condition = operands[1];
+
+    const cmpResult = this.registers.get("_cmp_result") || 0n;
+    let conditionMet = false;
+
+    switch (condition.toLowerCase()) {
+      case "eq":
+        conditionMet = cmpResult === 0n;
+        break;
+      case "ne":
+        conditionMet = cmpResult !== 0n;
+        break;
+      case "lt":
+        conditionMet = cmpResult < 0n;
+        break;
+      case "le":
+        conditionMet = cmpResult <= 0n;
+        break;
+      case "gt":
+        conditionMet = cmpResult > 0n;
+        break;
+      case "ge":
+        conditionMet = cmpResult >= 0n;
+        break;
+      case "cs": // carry set (unsigned >=)
+      case "hs": // higher or same (unsigned >=)
+        // For unsigned comparison, we need to handle this differently
+        // For now, treating as signed >=
+        conditionMet = cmpResult >= 0n;
+        break;
+      case "cc": // carry clear (unsigned <)
+      case "lo": // lower (unsigned <)
+        conditionMet = cmpResult < 0n;
+        break;
+      case "mi": // minus (negative)
+        conditionMet = cmpResult < 0n;
+        break;
+      case "pl": // plus (positive or zero)
+        conditionMet = cmpResult >= 0n;
+        break;
+      case "vs": // overflow set
+      case "vc": // overflow clear
+        // For simplicity, these always return false in this implementation
+        conditionMet = false;
+        break;
+      case "hi": // higher (unsigned >)
+        conditionMet = cmpResult > 0n;
+        break;
+      case "ls": // lower or same (unsigned <=)
+        conditionMet = cmpResult <= 0n;
+        break;
+      default:
+        throw new Error(`Unknown condition code: ${condition}`);
+    }
+
+    this.setRegister(dest, conditionMet ? 1n : 0n);
+    this.pc++;
   }
 
   private handlePrintf(): void {
