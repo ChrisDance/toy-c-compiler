@@ -1,4 +1,4 @@
-export type CodeSample = { code: string; output: number };
+export type CodeSample = { code: string; output: any };
 
 export const testCases: CodeSample[] = [
   {

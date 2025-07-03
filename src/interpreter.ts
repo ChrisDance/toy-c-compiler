@@ -234,7 +234,7 @@ export class ARM64Interpreter {
         this.handleSysCall(operands);
         break;
       default:
-        throw new Error("Instruction not implemented");
+        /*functions like adrp we are handing specially */
         this.pc++;
         break;
     }

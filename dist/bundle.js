@@ -31,10 +31,15 @@ var Compiler = (() => {
     start = 0;
     current = 0;
     line = 1;
-    constructor(source) {
+    load(source) {
       this.source = source;
+      this.tokens = [];
+      this.start = 0;
+      this.current = 0;
+      this.line = 1;
+      return this;
     }
-    scanTokens() {
+    run() {
       while (!this.isAtEnd()) {
         this.start = this.current;
         this.scanToken();
@@ -80,7 +85,6 @@ var Compiler = (() => {
           if (this.peek() === "/") {
             while (this.advance() != "\n") {
             }
-            console.log("NEWLINE");
           } else {
             this.addToken("DIVIDE" /* DIVIDE */);
           }
@@ -195,10 +199,15 @@ var Compiler = (() => {
   var Parser = class {
     tokens;
     current = 0;
-    constructor(tokens) {
+    load(tokens) {
       this.tokens = tokens;
+      this.current = 0;
+      return this;
     }
-    parse() {
+    run() {
+      if (!this.tokens) {
+        throw new Error("No tokens loaded");
+      }
       if (this.tokens.length <= 1) {
         throw new Error("Cannot parse empty program");
       }
@@ -438,7 +447,6 @@ var Compiler = (() => {
       }
       return expr;
     }
-    // New: Parse unary expressions (address-of and dereference)
     parseUnary() {
       if (this.match("AMPERSAND" /* AMPERSAND */)) {
         const operator = this.previous().lexeme;
@@ -584,7 +592,7 @@ var Compiler = (() => {
 
   // src/codegen.ts
   var RegisterAllocator = class {
-    /* Fixed pool of callee-saved registers - real allocators consider register classes and calling conventions */
+    /* fixed pool of callee-saved registers */
     availableRegs = [
       "x8",
       "x9",
@@ -596,7 +604,7 @@ var Compiler = (() => {
       "x15"
     ];
     usedRegs = [];
-    /* First-available allocation strategy - real compilers use sophisticated cost models */
+    /* first-available allocation*/
     allocate() {
       if (this.availableRegs.length === 0) {
         throw new Error("No more registers available - expression too complex");
@@ -605,7 +613,7 @@ var Compiler = (() => {
       this.usedRegs.push(reg);
       return reg;
     }
-    /* Simple pool-based deallocation - real allocators track live ranges and interference */
+    /* simple pool-based deallocation: real allocators track live ranges and interference */
     release(reg) {
       const index = this.usedRegs.indexOf(reg);
       if (index !== -1) {
@@ -613,46 +621,45 @@ var Compiler = (() => {
         this.availableRegs.unshift(reg);
       }
     }
-    /* Per-function reset - real compilers maintain global register state across optimization passes */
+    /* per-function reset: real compilers maintain global register state across optimization passes */
     reset() {
       this.availableRegs = ["x8", "x9", "x10", "x11", "x12", "x13", "x14", "x15"];
       this.usedRegs = [];
     }
-    /* Fallback detection for stack-based code generation when registers exhausted */
+    /* fallback detection for stack-based code generation when no registers are available*/
     hasAvailable() {
       return this.availableRegs.length > 0;
     }
   };
   var ARM64CodeGenerator = class {
+    ast;
     output = [];
     currentFunction = "";
     functionEndLabel = "";
-    /* Stack frame layout tracking - real compilers use sophisticated frame analysis */
     varLocationMap = /* @__PURE__ */ new Map();
     /* String literal pooling - avoids duplicate string constants in output */
     stringLiterals = /* @__PURE__ */ new Map();
     labelCounter = 0;
     stringLiteralCounter = 0;
     regAlloc = new RegisterAllocator();
-    /* Per-function stack offset tracking - real compilers do global stack frame optimization */
     nextOffsetMap = /* @__PURE__ */ new Map();
-    /* Hard-coded external function implementations - avoids implementing a full linker */
-    /* Real compilers generate symbol references resolved at link time */
+    /* because there is no way i'm writing a linker, we're going to
+      cheat and hardcode the routines, where we'd otherwise need to
+      generate symbol references resolved at link time */
     specialFunctions = {
       printf: (args) => {
         const formatString = "%ld\\n";
         const label = this.addStringLiteral(formatString);
-        if (args[0].type === "UnaryExpression") {
+        if (args[0].type === "UnaryExpression" /* UnaryExpression */) {
           const unaryExpr = args[0];
-          if (unaryExpr.operator === "&" && unaryExpr.operand.type === "Identifier") {
+          if (unaryExpr.operator === "&" && unaryExpr.operand.type === "Identifier" /* Identifier */) {
             const varName = unaryExpr.operand.name;
             const offset = this.getVarLocation(this.currentFunction, varName);
             if (offset) {
               return [
-                /* Load pointer value then dereference - demonstrates two-level memory access */
                 `	ldr	x8, [sp, #${offset}]`,
                 `	ldr	x0, [x8]`,
-                /* ARM64 calling convention setup for variadic functions */
+                /* arm64 calling convention setup for variadic functions */
                 "mov x9, sp",
                 "mov x8, x0",
                 "str x8, [x9]",
@@ -666,7 +673,6 @@ var Compiler = (() => {
         const argCode = this.generateExpression(args[0]);
         return [
           ...argCode,
-          /* ARM64 variadic function calling convention requires stack setup */
           "mov x9, sp",
           "mov x8, x0",
           "str x8, [x9]",
@@ -687,17 +693,23 @@ var Compiler = (() => {
         return result;
       }
     };
-    /* Main entry point - orchestrates the entire code generation process */
-    generate(ast) {
+    load(ast) {
       this.output = [];
       this.varLocationMap.clear();
       this.stringLiterals.clear();
       this.labelCounter = 0;
       this.stringLiteralCounter = 0;
       this.nextOffsetMap.clear();
+      this.ast = ast;
+      return this;
+    }
+    run() {
+      if (!this.ast) {
+        throw new Error("No ast loaded in code generator");
+      }
       this.addLine("	.section	__TEXT,__text,regular,pure_instructions");
       this.addLine("	.build_version macos, 15, 0	sdk_version 15, 4");
-      for (const func of ast.functions) {
+      for (const func of this.ast.functions) {
         this.generateFunction(func);
       }
       if (this.stringLiterals.size > 0) {
@@ -711,7 +723,6 @@ var Compiler = (() => {
       }
       return this.output.join("\n");
     }
-    /* Assignment statement code generation - demonstrates lvalue/rvalue distinction */
     generateAssignmentStatement(stmt) {
       const valueCode = this.generateExpression(stmt.value);
       this.addLines(valueCode);
@@ -723,7 +734,7 @@ var Compiler = (() => {
           );
         }
         this.addLine(`	str	x0, [sp, #${offset}]`);
-      } else if (stmt.target.type === "UnaryExpression" && stmt.target.operator === "*") {
+      } else if (stmt.target.type === "UnaryExpression" /* UnaryExpression */ && stmt.target.operator === "*") {
         this.addLine(`	mov	x8, x0`);
         const ptrCode = this.generateExpression(stmt.target.operand);
         this.addLines(ptrCode);
@@ -732,7 +743,6 @@ var Compiler = (() => {
         throw new Error("Invalid assignment target");
       }
     }
-    /* Simple variable counting - demonstrates basic static analysis */
     countLocalVariables(block) {
       let count = 0;
       for (const stmt of block.statements) {
@@ -740,30 +750,29 @@ var Compiler = (() => {
       }
       return count;
     }
-    /* Recursive variable counting - handles nested blocks */
     countVariablesInStatement(stmt) {
       switch (stmt.type) {
-        case "VariableDeclaration":
+        case "VariableDeclaration" /* VariableDeclaration */:
           return 1;
-        case "BlockStatement":
+        case "BlockStatement" /* BlockStatement */:
           return this.countLocalVariables(stmt);
-        case "IfStatement":
+        case "IfStatement" /* IfStatement */:
           let ifCount = 0;
-          if (stmt.thenBranch.type === "BlockStatement") {
+          if (stmt.thenBranch.type === "BlockStatement" /* BlockStatement */) {
             ifCount += this.countLocalVariables(stmt.thenBranch);
           } else {
             ifCount += this.countVariablesInStatement(stmt.thenBranch);
           }
           if (stmt.elseBranch) {
-            if (stmt.elseBranch.type === "BlockStatement") {
+            if (stmt.elseBranch.type === "BlockStatement" /* BlockStatement */) {
               ifCount += this.countLocalVariables(stmt.elseBranch);
             } else {
               ifCount += this.countVariablesInStatement(stmt.elseBranch);
             }
           }
           return ifCount;
-        case "WhileStatement":
-          if (stmt.body.type === "BlockStatement") {
+        case "WhileStatement" /* WhileStatement */:
+          if (stmt.body.type === "BlockStatement" /* BlockStatement */) {
             return this.countLocalVariables(stmt.body);
           } else {
             return this.countVariablesInStatement(stmt.body);
@@ -772,7 +781,6 @@ var Compiler = (() => {
           return 0;
       }
     }
-    /* Stack frame size calculation */
     calculateStackSizeForFunction(func) {
       const baseStackSize = 32;
       const parameterSpace = Math.max(32, func.params.length * 8);
@@ -782,7 +790,6 @@ var Compiler = (() => {
       const total = baseStackSize + parameterSpace + localVarSpace + tempSpace;
       return Math.ceil(total / 16) * 16;
     }
-    /* Function code generation - demonstrates function prologue/epilogue patterns */
     generateFunction(func) {
       this.currentFunction = func.name;
       this.varLocationMap.set(func.name, /* @__PURE__ */ new Map());
@@ -817,13 +824,11 @@ var Compiler = (() => {
       this.addLine("	ret");
       this.addLine("							 ; -- End function");
     }
-    /* Block statement processing - demonstrates sequential code generation */
     generateBlock(block) {
       for (const stmt of block.statements) {
         this.generateStatement(stmt);
       }
     }
-    /* Return statement handling - demonstrates control flow management */
     generateReturnStatement(stmt) {
       if (stmt.type == "ReturnStatement" /* ReturnStatement */) {
         const exprCode = this.generateExpression(stmt.argument);
@@ -831,19 +836,19 @@ var Compiler = (() => {
       }
       this.addLine(`	b	${this.functionEndLabel}`);
     }
-    /* Statement dispatcher - demonstrates visitor pattern for code generation */
+    /* visitor pattern for code generation */
     generateStatement(stmt) {
       switch (stmt.type) {
-        case "ReturnStatement":
+        case "ReturnStatement" /* ReturnStatement */:
           this.generateReturnStatement(stmt);
           break;
-        case "BlockStatement":
+        case "BlockStatement" /* BlockStatement */:
           this.generateBlock(stmt);
           break;
-        case "VariableDeclaration":
+        case "VariableDeclaration" /* VariableDeclaration */:
           const offset = this.allocateStackSlot(this.currentFunction);
           this.setVarLocation(this.currentFunction, stmt.name, offset);
-          if (stmt.init.type === "NumberLiteral") {
+          if (stmt.init.type === "NumberLiteral" /* NumberLiteral */) {
             this.addLine(
               `	mov	x8, #${stmt.init.value}				; =0x${stmt.init.value.toString(16)}`
             );
@@ -854,17 +859,17 @@ var Compiler = (() => {
             this.addLine(`	str	x0, [sp, #${offset}]`);
           }
           break;
-        case "ExpressionStatement":
+        case "ExpressionStatement" /* ExpressionStatement */:
           const exprCode = this.generateExpression(stmt.expression);
           this.addLines(exprCode);
           break;
-        case "AssignmentStatement":
+        case "AssignmentStatement" /* AssignmentStatement */:
           this.generateAssignmentStatement(stmt);
           break;
-        case "IfStatement":
+        case "IfStatement" /* IfStatement */:
           this.generateIfStatement(stmt);
           break;
-        case "WhileStatement":
+        case "WhileStatement" /* WhileStatement */:
           this.generateWhileStatement(stmt);
           break;
       }
@@ -875,7 +880,6 @@ var Compiler = (() => {
       this.nextOffsetMap.set(funcName, currentOffset + 8);
       return currentOffset;
     }
-    /* While loop code generation - demonstrates structured control flow */
     generateWhileStatement(stmt) {
       const loopStart = this.generateLabel("loop_start");
       const loopEnd = this.generateLabel("loop_end");
@@ -884,7 +888,7 @@ var Compiler = (() => {
       this.addLines(conditionCode);
       this.addLine("	cmp	x0, #0");
       this.addLine(`	beq	${loopEnd}`);
-      if (stmt.body.type === "BlockStatement") {
+      if (stmt.body.type === "BlockStatement" /* BlockStatement */) {
         this.generateBlock(stmt.body);
       } else {
         this.generateStatement(stmt.body);
@@ -892,7 +896,6 @@ var Compiler = (() => {
       this.addLine(`	b	${loopStart}`);
       this.addLine(`${loopEnd}:`);
     }
-    /* If statement code generation - demonstrates conditional control flow */
     generateIfStatement(stmt) {
       const endLabel = this.generateLabel("endif");
       const elseLabel = stmt.elseBranch ? this.generateLabel("else") : endLabel;
@@ -900,7 +903,7 @@ var Compiler = (() => {
       this.addLines(conditionCode);
       this.addLine("	cmp	x0, #0");
       this.addLine(`	beq	${elseLabel}`);
-      if (stmt.thenBranch.type === "BlockStatement") {
+      if (stmt.thenBranch.type === "BlockStatement" /* BlockStatement */) {
         this.generateBlock(stmt.thenBranch);
       } else {
         this.generateStatement(stmt.thenBranch);
@@ -908,7 +911,7 @@ var Compiler = (() => {
       if (stmt.elseBranch) {
         this.addLine(`	b	${endLabel}`);
         this.addLine(`${elseLabel}:`);
-        if (stmt.elseBranch.type === "BlockStatement") {
+        if (stmt.elseBranch.type === "BlockStatement" /* BlockStatement */) {
           this.generateBlock(stmt.elseBranch);
         } else {
           this.generateStatement(stmt.elseBranch);
@@ -916,31 +919,30 @@ var Compiler = (() => {
       }
       this.addLine(`${endLabel}:`);
     }
-    /* Expression code generation dispatcher - demonstrates recursive descent pattern */
+    /* recursive descent pattern */
     generateExpression(expr) {
       switch (expr.type) {
-        case "BinaryExpression":
+        case "BinaryExpression" /* BinaryExpression */:
           return this.generateBinaryExpression(expr);
-        case "UnaryExpression":
+        case "UnaryExpression" /* UnaryExpression */:
           return this.generateUnaryExpression(expr);
-        case "FunctionCall":
+        case "FunctionCall" /* FunctionCall */:
           return this.generateFunctionCall(expr);
-        case "Identifier":
+        case "Identifier" /* Identifier */:
           return this.generateIdentifier(expr);
-        case "NumberLiteral":
+        case "NumberLiteral" /* NumberLiteral */:
           return this.generateNumberLiteral(expr);
-        case "VoidExpression":
+        case "VoidExpression" /* VoidExpression */:
           return [];
         default:
           return [];
       }
     }
-    /* Unary expression handling - demonstrates address-of and dereference operations */
     generateUnaryExpression(expr) {
       const result = [];
       switch (expr.operator) {
         case "&":
-          if (expr.operand.type === "Identifier") {
+          if (expr.operand.type === "Identifier" /* Identifier */) {
             const offset = this.getVarLocation(
               this.currentFunction,
               expr.operand.name
@@ -965,7 +967,6 @@ var Compiler = (() => {
       }
       return result;
     }
-    /* Binary expression code generation - demonstrates register allocation challenges */
     generateBinaryExpression(expr) {
       const result = [];
       if (!this.regAlloc.hasAvailable()) {
@@ -1011,7 +1012,7 @@ var Compiler = (() => {
       this.regAlloc.release(rightReg);
       return result;
     }
-    /* Stack-based expression evaluation - fallback when registers exhausted */
+    /* stack-based expression evaluation for when no available registers */
     generateBinaryExpressionStackBased(expr) {
       const result = [];
       const leftCode = this.generateExpression(expr.left);
@@ -1053,7 +1054,6 @@ var Compiler = (() => {
       }
       return result;
     }
-    /* Function call code generation - demonstrates calling convention implementation */
     generateFunctionCall(expr) {
       if (expr.callee in this.specialFunctions) {
         return this.specialFunctions[expr.callee](expr.arguments);
@@ -1087,7 +1087,7 @@ var Compiler = (() => {
       result.push(`	bl	_${expr.callee}`);
       return result;
     }
-    /* Variable access code generation; symbol table lookup */
+    /* variable access code generation; symbol table lookup */
     generateIdentifier(expr) {
       const offset = this.getVarLocation(this.currentFunction, expr.name);
       if (!offset) {
@@ -1097,11 +1097,10 @@ var Compiler = (() => {
       }
       return [`	ldr	x0, [sp, #${offset}]`];
     }
-    /* Literal constant loading; demonstrates immediate value handling */
+    /* literal constant loading; demonstrates immediate value handling */
     generateNumberLiteral(expr) {
       return [`	mov	x0, #${expr.value}				; =0x${expr.value.toString(16)}`];
     }
-    /* Unique label generation; prevents assembly-time conflicts */
     generateLabel(prefix) {
       const label = `L${this.labelCounter++}_${prefix}`;
       return label;
@@ -1112,7 +1111,7 @@ var Compiler = (() => {
     addLines(lines) {
       this.output.push(...lines);
     }
-    /* Variable location tracking; maintains symbol table per function */
+    /* variable location tracking; maintains symbol table per function */
     setVarLocation(funcName, varName, offset) {
       let varMap = this.varLocationMap.get(funcName);
       if (!varMap) {
@@ -1121,7 +1120,6 @@ var Compiler = (() => {
       }
       varMap.set(varName, offset);
     }
-    /* Variable location lookup and symbol resolution for code generation */
     getVarLocation(funcName, varName) {
       const varMap = this.varLocationMap.get(funcName);
       if (!varMap) {
@@ -1129,7 +1127,6 @@ var Compiler = (() => {
       }
       return varMap.get(varName);
     }
-    /* String literal management; constant pooling for efficiency */
     addStringLiteral(value) {
       const label = `l_.str.${this.stringLiteralCounter++}`;
       this.stringLiterals.set(label, value);
@@ -1139,30 +1136,18 @@ var Compiler = (() => {
 
   // src/interpreter.ts
   var ARM64Interpreter = class {
-    // 64-bit registers (x0-x30)
     registers = /* @__PURE__ */ new Map();
-    // Stack memory (grows downward)
     stack = /* @__PURE__ */ new Map();
-    // Special registers
     stackPointer = 0x7fff0000n;
-    // Start high
     framePointer = 0x7fff0000n;
     linkRegister = 0n;
-    // Program state
     instructions = [];
     pc = 0;
-    // Program counter
     labels = /* @__PURE__ */ new Map();
     running = false;
-    // String literals section
     stringLiterals = /* @__PURE__ */ new Map();
-    // Output buffer for printf
     output = [];
-    // Function call stack for returns
     callStack = [];
-    constructor() {
-      this.initializeRegisters();
-    }
     initializeRegisters() {
       for (let i = 0; i <= 30; i++) {
         this.registers.set(`x${i}`, 0n);
@@ -1171,10 +1156,8 @@ var Compiler = (() => {
       this.registers.set("x29", this.framePointer);
       this.registers.set("x30", this.linkRegister);
     }
-    /**
-     * Parse assembly code and prepare for execution
-     */
-    loadAssembly(assembly) {
+    load(assembly) {
+      this.initializeRegisters();
       this.instructions = [];
       this.labels.clear();
       this.stringLiterals.clear();
@@ -1211,6 +1194,7 @@ var Compiler = (() => {
           this.instructions.push(instruction);
         }
       }
+      return this;
     }
     parseStringLiteral(line) {
       const match = line.match(/\.asciz\s+"([^"]*)"/);
@@ -1257,10 +1241,7 @@ var Compiler = (() => {
         original: line
       };
     }
-    /**
-     * Execute the loaded assembly program
-     */
-    execute() {
+    run() {
       this.running = true;
       this.output = [];
       this.pc = 0;
@@ -1349,6 +1330,7 @@ var Compiler = (() => {
           this.handleSysCall(operands);
           break;
         default:
+          throw new Error("Instruction not implemented");
           this.pc++;
           break;
       }
@@ -1551,12 +1533,10 @@ var Compiler = (() => {
           conditionMet = cmpResult >= 0n;
           break;
         case "cs":
-        // carry set (unsigned >=)
         case "hs":
           conditionMet = cmpResult >= 0n;
           break;
         case "cc":
-        // carry clear (unsigned <)
         case "lo":
           conditionMet = cmpResult < 0n;
           break;
@@ -1567,7 +1547,6 @@ var Compiler = (() => {
           conditionMet = cmpResult >= 0n;
           break;
         case "vs":
-        // overflow set
         case "vc":
           conditionMet = false;
           break;
@@ -1628,9 +1607,7 @@ var Compiler = (() => {
     storeToMemory(address, value) {
       this.stack.set(address, value);
     }
-    /**
-     * Get current interpreter state for debugging
-     */
+    /*debug */
     getState() {
       return {
         registers: Object.fromEntries(this.registers),
@@ -1641,9 +1618,6 @@ var Compiler = (() => {
         running: this.running
       };
     }
-    /**
-     * Reset interpreter to initial state
-     */
     reset() {
       this.initializeRegisters();
       this.stack.clear();
@@ -1661,21 +1635,23 @@ var Compiler = (() => {
   };
 
   // src/optimiser.ts
-  var IterativeOptimizer = class {
+  var Optimizer = class {
     stats;
     constantValues;
     usedVariables;
     currentPassStats;
     currentPhase;
     phaseChanged = false;
-    /* Pointer safety tracking - essential for correctness in presence of aliasing */
     hasPointers = false;
     pointerVariables;
-    // Variables declared as pointer types
+    /*variables declared as pointer types*/
     pointerReferencedVariables;
-    // Variables with address taken (&var)
-    constructor() {
+    /*variables with address taken (&var)*/
+    program;
+    load(program) {
       this.resetStats();
+      this.program = this.deepClone(program);
+      return this;
     }
     resetStats() {
       this.stats = {
@@ -1702,71 +1678,39 @@ var Compiler = (() => {
         algebraicSimplification: 0
       };
     }
-    functionQueue = [];
-    _program;
-    /* Multi-pass optimization with fixed-point iteration - continues until no changes */
-    optimize(program, maxPasses = 10) {
+    /* multi-pass optimization with fixed-point iteration (runs until a pass didn't yield a change)*/
+    run(maxPasses = 10) {
       this.resetStats();
-      let currentProgram = this.deepClone(program);
-      this._program = currentProgram;
-      console.log("\n=== Pointer Detection Phase ===");
-      this.detectPointers(currentProgram);
+      this.detectPointers(this.program);
       if (this.hasPointers) {
-        console.log(
-          `Pointers detected! Found pointer variables: ${Array.from(this.pointerVariables).join(", ")}`
-        );
-        console.log(
-          `Variables with address taken: ${Array.from(this.pointerReferencedVariables).join(", ")}`
-        );
-        console.log("Optimization will be DISABLED for pointer-related code");
         this.stats.pointersDetected = this.pointerVariables.size + this.pointerReferencedVariables.size;
-      } else {
-        console.log("No pointers detected, full optimization enabled");
       }
       let passChanged = true;
       while (passChanged && this.stats.passes < maxPasses) {
         this.stats.passes++;
         this.resetPassStats();
-        console.log(`
-=== Pass ${this.stats.passes} ===`);
         passChanged = false;
         this.currentPhase = "Dead Code Elimination" /* DeadCodeElimination */;
         this.phaseChanged = false;
-        console.log(`
-Pass ${this.stats.passes}: ${this.currentPhase}`);
         this.constantValues = {};
         this.usedVariables = /* @__PURE__ */ new Set();
-        this.collectUsedVariables(currentProgram);
-        currentProgram = this.runDeadCodeElimination(currentProgram);
+        this.collectUsedVariables(this.program);
+        this.program = this.runDeadCodeElimination(this.program);
         if (this.phaseChanged) {
           passChanged = true;
-          console.log(
-            `  DCE: ${this.currentPassStats.deadCodeElimination} eliminations`
-          );
         }
         this.currentPhase = "Constant Propagation" /* ConstantPropagation */;
         this.phaseChanged = false;
-        console.log(`
-Pass ${this.stats.passes}: ${this.currentPhase}`);
         this.constantValues = {};
-        currentProgram = this.runConstantPropagation(currentProgram);
+        this.program = this.runConstantPropagation(this.program);
         if (this.phaseChanged) {
           passChanged = true;
-          console.log(
-            `  CP: ${this.currentPassStats.constantPropagation} propagations`
-          );
         }
         this.currentPhase = "Constant Folding" /* ConstantFolding */;
         this.phaseChanged = false;
-        console.log(`
-Pass ${this.stats.passes}: ${this.currentPhase}`);
-        currentProgram = this.runConstantFolding(currentProgram);
+        this.program = this.runConstantFolding(this.program);
         if (this.phaseChanged) {
           passChanged = true;
-          console.log(`  CF: ${this.currentPassStats.constantFolding} foldings`);
-          console.log(
-            `  AS: ${this.currentPassStats.algebraicSimplification} simplifications`
-          );
         }
         this.stats.constantFolding += this.currentPassStats.constantFolding;
         this.stats.constantPropagation += this.currentPassStats.constantPropagation;
@@ -1774,15 +1718,10 @@ Pass ${this.stats.passes}: ${this.currentPhase}`);
         this.stats.algebraicSimplification += this.currentPassStats.algebraicSimplification;
       }
       this.stats.totalOptimizations = this.stats.constantFolding + this.stats.constantPropagation + this.stats.deadCodeElimination + this.stats.algebraicSimplification;
-      console.log(`
-Optimization completed after ${this.stats.passes} passes`);
-      console.log("\n=== Dead Function Elimination ===");
-      if (currentProgram.functions.length === 0) {
+      if (this.program.functions.length === 0) {
         throw new Error("Program needs at least one function");
       }
-      const mainFunction = currentProgram.functions.find(
-        (f) => f.name === "main"
-      );
+      const mainFunction = this.program.functions.find((f) => f.name === "main");
       if (!mainFunction) {
         throw new Error("Program needs a main function");
       }
@@ -1794,9 +1733,8 @@ Optimization completed after ${this.stats.passes} passes`);
           continue;
         }
         calledFunctions.add(currentFunction.name);
-        console.log(`Processing function: ${currentFunction.name}`);
         this.findFunctionCalls(currentFunction).forEach((funcName) => {
-          const calledFunc = currentProgram.functions.find(
+          const calledFunc = this.program.functions.find(
             (f) => f.name === funcName
           );
           if (calledFunc && !calledFunctions.has(funcName)) {
@@ -1804,21 +1742,14 @@ Optimization completed after ${this.stats.passes} passes`);
           }
         });
       }
-      const originalFunctionCount = currentProgram.functions.length;
-      const removedFunctions = currentProgram.functions.filter((f) => !calledFunctions.has(f.name)).map((f) => f.name);
-      if (removedFunctions.length > 0) {
-        console.log(`Removing unused functions: ${removedFunctions.join(", ")}`);
-      }
-      currentProgram.functions = currentProgram.functions.filter(
+      const originalFunctionCount = this.program.functions.length;
+      const removedFunctions = this.program.functions.filter((f) => !calledFunctions.has(f.name)).map((f) => f.name);
+      this.program.functions = this.program.functions.filter(
         (f) => calledFunctions.has(f.name)
       );
       this.stats.functionsRemoved = originalFunctionCount - calledFunctions.size;
-      console.log(`Functions kept: ${Array.from(calledFunctions).join(", ")}`);
-      console.log(`Functions removed: ${this.stats.functionsRemoved}`);
-      return { optimized: currentProgram, stats: { ...this.stats } };
+      return { asm: this.program, stats: { ...this.stats } };
     }
-    // =================== POINTER DETECTION ===================
-    /* Conservative pointer analysis - errs on side of safety to prevent incorrect optimization */
     detectPointers(program) {
       this.hasPointers = false;
       this.pointerVariables.clear();
@@ -1830,17 +1761,11 @@ Optimization completed after ${this.stats.passes} passes`);
     detectPointersInFunction(func) {
       if (func.returnType.includes("*")) {
         this.hasPointers = true;
-        console.log(
-          `  Function ${func.name} returns pointer type: ${func.returnType}`
-        );
       }
       for (const param of func.params) {
         if (param.paramType.includes("*")) {
           this.hasPointers = true;
           this.pointerVariables.add(param.name);
-          console.log(
-            `  Parameter ${param.name} is pointer type: ${param.paramType}`
-          );
         }
       }
       this.detectPointersInStatement(func.body);
@@ -1852,9 +1777,6 @@ Optimization completed after ${this.stats.passes} passes`);
           if (varDecl.varType.includes("*")) {
             this.hasPointers = true;
             this.pointerVariables.add(varDecl.name);
-            console.log(
-              `  Variable ${varDecl.name} is pointer type: ${varDecl.varType}`
-            );
           }
           this.detectPointersInExpression(varDecl.init);
           break;
@@ -1862,9 +1784,6 @@ Optimization completed after ${this.stats.passes} passes`);
           const assignment = stmt;
           if (typeof assignment.target !== "string") {
             this.hasPointers = true;
-            console.log(
-              `  Found dereferenced pointer assignment: *${assignment.target.operand}`
-            );
           }
           this.detectPointersInExpression(assignment.value);
           break;
@@ -1906,10 +1825,8 @@ Optimization completed after ${this.stats.passes} passes`);
             if (unaryExpr.operand.type === "Identifier" /* Identifier */) {
               const varName = unaryExpr.operand.name;
               this.pointerReferencedVariables.add(varName);
-              console.log(`  Address taken of variable: ${varName}`);
             }
           } else if (unaryExpr.operator === "*") {
-            console.log(`  Found pointer dereference operation`);
           }
           this.detectPointersInExpression(unaryExpr.operand);
           break;
@@ -1924,26 +1841,20 @@ Optimization completed after ${this.stats.passes} passes`);
             this.detectPointersInExpression(arg);
           }
           break;
-        /* Identifier and NumberLiteral are safe by themselves */
+        /* identifier and NumberLiteral are safe by themselves */
         default:
           break;
       }
     }
-    // =================== POINTER-SAFE OPTIMIZATION CHECKS ===================
-    /* Aliasing analysis - determines if variable can be safely optimized */
     canOptimizeVariable(varName) {
       if (!this.hasPointers) return true;
       const isPointer = this.pointerVariables.has(varName);
       const hasAddressTaken = this.pointerReferencedVariables.has(varName);
       if (isPointer || hasAddressTaken) {
-        console.log(
-          `  Skipping optimization of variable '${varName}' (${isPointer ? "is pointer" : "address taken"})`
-        );
         return false;
       }
       return true;
     }
-    /* May-alias analysis for expressions - conservative approach */
     containsPointerOperations(expr) {
       switch (expr.type) {
         case "UnaryExpression" /* UnaryExpression */:
@@ -1964,7 +1875,6 @@ Optimization completed after ${this.stats.passes} passes`);
           return false;
       }
     }
-    /* Statement-level aliasing check - prevents optimization of aliased memory */
     statementInvolvesPointers(stmt) {
       switch (stmt.type) {
         case "VariableDeclaration" /* VariableDeclaration */:
@@ -1997,8 +1907,6 @@ Optimization completed after ${this.stats.passes} passes`);
           return false;
       }
     }
-    // =================== OPTIMIZATION PHASES ===================
-    /* Function call discovery - builds call graph for dead function elimination */
     findFunctionCalls(func) {
       const calls = [];
       const findCallsInExpression = (expr) => {
@@ -2050,7 +1958,6 @@ Optimization completed after ${this.stats.passes} passes`);
       findCallsInStatement(func.body);
       return calls;
     }
-    /* Dead Code Elimination - removes unused variables and unreachable statements */
     runDeadCodeElimination(program) {
       return {
         type: "Program" /* Program */,
@@ -2070,7 +1977,6 @@ Optimization completed after ${this.stats.passes} passes`);
         if (foundReturn) {
           this.currentPassStats.deadCodeElimination++;
           this.phaseChanged = true;
-          console.log(`  DCE: Removed unreachable statement after return`);
           continue;
         }
         const processed = this.dceStatement(stmt);
@@ -2088,7 +1994,6 @@ Optimization completed after ${this.stats.passes} passes`);
     }
     dceStatement(stmt) {
       if (this.statementInvolvesPointers(stmt)) {
-        console.log(`  DCE: Skipping pointer-related statement`);
         return stmt;
       }
       switch (stmt.type) {
@@ -2097,7 +2002,6 @@ Optimization completed after ${this.stats.passes} passes`);
           if (!this.usedVariables.has(varDecl.name) && !this.hasSideEffects(varDecl.init) && this.canOptimizeVariable(varDecl.name)) {
             this.currentPassStats.deadCodeElimination++;
             this.phaseChanged = true;
-            console.log(`  DCE: Removed unused variable '${varDecl.name}'`);
             return null;
           }
           return stmt;
@@ -2106,9 +2010,6 @@ Optimization completed after ${this.stats.passes} passes`);
           if (typeof assignment.target === "string" && !this.usedVariables.has(assignment.target) && !this.hasSideEffects(assignment.value) && this.canOptimizeVariable(assignment.target)) {
             this.currentPassStats.deadCodeElimination++;
             this.phaseChanged = true;
-            console.log(
-              `  DCE: Removed assignment to unused variable '${assignment.target}'`
-            );
             return null;
           }
           return stmt;
@@ -2120,10 +2021,8 @@ Optimization completed after ${this.stats.passes} passes`);
             this.currentPassStats.deadCodeElimination++;
             this.phaseChanged = true;
             if (condValue !== 0) {
-              console.log(`  DCE: Removed else branch (condition always true)`);
               return this.cfStatement(ifStmt.thenBranch);
             } else {
-              console.log(`  DCE: Removed then branch (condition always false)`);
               return ifStmt.elseBranch ? this.cfStatement(ifStmt.elseBranch) : { type: "BlockStatement" /* BlockStatement */, statements: [] };
             }
           }
@@ -2157,7 +2056,6 @@ Optimization completed after ${this.stats.passes} passes`);
           if (!this.hasSideEffects(exprStmt.expression)) {
             this.currentPassStats.deadCodeElimination++;
             this.phaseChanged = true;
-            console.log(`  DCE: Removed side-effect-free expression statement`);
             return null;
           }
           return stmt;
@@ -2165,7 +2063,6 @@ Optimization completed after ${this.stats.passes} passes`);
           return stmt;
       }
     }
-    /* Constant Propagation - replaces variable uses with their constant values */
     runConstantPropagation(program) {
       return {
         type: "Program" /* Program */,
@@ -2187,7 +2084,6 @@ Optimization completed after ${this.stats.passes} passes`);
     }
     cpStatement(stmt) {
       if (this.statementInvolvesPointers(stmt)) {
-        console.log(`  CP: Skipping pointer-related statement`);
         return stmt;
       }
       switch (stmt.type) {
@@ -2224,14 +2120,8 @@ Optimization completed after ${this.stats.passes} passes`);
             this.currentPassStats.constantPropagation++;
             this.phaseChanged = true;
             if (condValue !== 0) {
-              console.log(
-                `  CP: Condition always true, processing only then branch`
-              );
               return this.cpStatement(ifStmt.thenBranch);
             } else {
-              console.log(
-                `  CP: Condition always false, processing only else branch`
-              );
               return ifStmt.elseBranch ? this.cpStatement(ifStmt.elseBranch) : { type: "BlockStatement" /* BlockStatement */, statements: [] };
             }
           }
@@ -2308,7 +2198,6 @@ Optimization completed after ${this.stats.passes} passes`);
     }
     cpExpression(expr) {
       if (this.containsPointerOperations(expr)) {
-        console.log(`  CP: Skipping pointer-related expression`);
         return expr;
       }
       switch (expr.type) {
@@ -2317,9 +2206,6 @@ Optimization completed after ${this.stats.passes} passes`);
           if (this.constantValues.hasOwnProperty(id.name) && this.constantValues[id.name] !== void 0 && this.canOptimizeVariable(id.name)) {
             this.currentPassStats.constantPropagation++;
             this.phaseChanged = true;
-            console.log(
-              `  CP: Replaced '${id.name}' with ${this.constantValues[id.name]}`
-            );
             return {
               type: "NumberLiteral" /* NumberLiteral */,
               value: this.constantValues[id.name]
@@ -2343,7 +2229,6 @@ Optimization completed after ${this.stats.passes} passes`);
           return expr;
       }
     }
-    /* Constant Folding & Algebraic Simplification - evaluates constant expressions */
     runConstantFolding(program) {
       return {
         type: "Program" /* Program */,
@@ -2364,7 +2249,6 @@ Optimization completed after ${this.stats.passes} passes`);
     }
     cfStatement(stmt) {
       if (this.statementInvolvesPointers(stmt)) {
-        console.log(`  CF: Skipping pointer-related statement`);
         return stmt;
       }
       switch (stmt.type) {
@@ -2405,7 +2289,6 @@ Optimization completed after ${this.stats.passes} passes`);
             if (condValue === 0) {
               this.currentPassStats.deadCodeElimination++;
               this.phaseChanged = true;
-              console.log(`  DCE: Removed while loop (condition always false)`);
               return { type: "BlockStatement" /* BlockStatement */, statements: [] };
             }
           }
@@ -2434,7 +2317,6 @@ Optimization completed after ${this.stats.passes} passes`);
     }
     cfExpression(expr) {
       if (this.containsPointerOperations(expr)) {
-        console.log(`  CF: Skipping pointer-related expression`);
         return expr;
       }
       switch (expr.type) {
@@ -2484,9 +2366,6 @@ Optimization completed after ${this.stats.passes} passes`);
             }
             this.currentPassStats.constantFolding++;
             this.phaseChanged = true;
-            console.log(
-              `  CF: Folded ${leftVal} ${binExpr.operator} ${rightVal} = ${result}`
-            );
             return { type: "NumberLiteral" /* NumberLiteral */, value: result };
           }
           return { ...binExpr, left, right };
@@ -2500,47 +2379,39 @@ Optimization completed after ${this.stats.passes} passes`);
           return expr;
       }
     }
-    /* Algebraic simplification - strength reduction and identity elimination */
     algebraicSimplify(operator, left, right) {
       if ((operator === "+" || operator === "-") && right.type === "NumberLiteral" /* NumberLiteral */ && right.value === 0) {
         this.currentPassStats.algebraicSimplification++;
         this.phaseChanged = true;
-        console.log(`  AS: Simplified ${operator} 0`);
         return left;
       }
       if (operator === "+" && left.type === "NumberLiteral" /* NumberLiteral */ && left.value === 0) {
         this.currentPassStats.algebraicSimplification++;
         this.phaseChanged = true;
-        console.log(`  AS: Simplified 0 +`);
         return right;
       }
       if (operator === "*" && right.type === "NumberLiteral" /* NumberLiteral */ && right.value === 1) {
         this.currentPassStats.algebraicSimplification++;
         this.phaseChanged = true;
-        console.log(`  AS: Simplified * 1`);
         return left;
       }
       if (operator === "*" && left.type === "NumberLiteral" /* NumberLiteral */ && left.value === 1) {
         this.currentPassStats.algebraicSimplification++;
         this.phaseChanged = true;
-        console.log(`  AS: Simplified 1 *`);
         return right;
       }
       if (operator === "*" && (left.type === "NumberLiteral" /* NumberLiteral */ && left.value === 0 || right.type === "NumberLiteral" /* NumberLiteral */ && right.value === 0)) {
         this.currentPassStats.algebraicSimplification++;
         this.phaseChanged = true;
-        console.log(`  AS: Simplified * 0`);
         return { type: "NumberLiteral" /* NumberLiteral */, value: 0 };
       }
       if (operator === "/" && right.type === "NumberLiteral" /* NumberLiteral */ && right.value === 1) {
         this.currentPassStats.algebraicSimplification++;
         this.phaseChanged = true;
-        console.log(`  AS: Simplified / 1`);
         return left;
       }
       return null;
     }
-    /* Liveness analysis - determines which variables are actually used */
     collectUsedVariables(program) {
       for (const func of program.functions) {
         this.collectUsedVariablesInFunction(func);
@@ -2616,45 +2487,20 @@ Optimization completed after ${this.stats.passes} passes`);
           break;
       }
     }
-    /* Pure function whitelist - functions known to have no side effects */
-    pureFunctions = /* @__PURE__ */ new Set([
-      "abs",
-      "max",
-      "min",
-      "sqrt",
-      "pow",
-      "sin",
-      "cos",
-      "tan",
-      "floor",
-      "ceil",
-      "round",
-      "log",
-      "exp",
-      "fabs",
-      "strlen"
-    ]);
-    /* Side effect analysis with interprocedural awareness */
+    /* side effect analysis with interprocedural awareness */
     hasSideEffects(expr) {
       switch (expr.type) {
         case "FunctionCall" /* FunctionCall */:
           const funcCall = expr;
-          if (this.pureFunctions.has(funcCall.callee)) {
-            console.log(`  Pure function detected: ${funcCall.callee}`);
-            return false;
-          }
-          const calledFunction = this._program.functions.find(
+          const calledFunction = this.program.functions.find(
             (f) => f.name === funcCall.callee
           );
           if (calledFunction) {
             if (this.isPureUserFunction(calledFunction)) {
-              console.log(`  User function appears pure: ${funcCall.callee}`);
               return false;
             }
           }
-          if (["printf", "scanf", "exit", "malloc", "free"].includes(
-            funcCall.callee
-          )) {
+          if (["printf", "exit"].includes(funcCall.callee)) {
             return true;
           }
           return true;
@@ -2668,7 +2514,7 @@ Optimization completed after ${this.stats.passes} passes`);
           return false;
       }
     }
-    /* Heuristic analysis for user-defined function purity */
+    /* heuristic approach, could be more more thorough */
     isPureUserFunction(func) {
       if (func.params.some((p) => p.paramType.includes("*"))) {
         return false;
@@ -2678,7 +2524,6 @@ Optimization completed after ${this.stats.passes} passes`);
       }
       return this.containsOnlyPureOperations(func.body);
     }
-    /* Check if statement block contains only pure operations */
     containsOnlyPureOperations(stmt) {
       switch (stmt.type) {
         case "BlockStatement" /* BlockStatement */:
@@ -2704,7 +2549,6 @@ Optimization completed after ${this.stats.passes} passes`);
           return false;
       }
     }
-    /* Def-use analysis; finds variables modified by statement */
     getModifiedVariables(stmt) {
       const modified = /* @__PURE__ */ new Set();
       const traverse = (node) => {
@@ -2765,7 +2609,6 @@ Optimization completed after ${this.stats.passes} passes`);
       traverse(stmt);
       return modified;
     }
-    /* Variable reference analysis; finds all variables referenced in expression */
     getVariablesInExpression(expr) {
       const variables = /* @__PURE__ */ new Set();
       const traverse = (node) => {
@@ -2803,24 +2646,20 @@ Optimization completed after ${this.stats.passes} passes`);
   // src/index.ts
   var Compiler = class {
     static tokenize(source) {
-      const tokens = new Lexer(source).scanTokens();
-      return tokens;
+      return new Lexer().load(source).run();
     }
     static parse(tokens) {
-      const ast = new Parser(tokens).parse();
-      return ast;
+      return new Parser().load(tokens).run();
     }
     static optimise(program) {
-      return new IterativeOptimizer().optimize(program).optimized;
+      return new Optimizer().load(program).run();
     }
     static generate(program) {
-      const generator = new ARM64CodeGenerator();
-      return generator.generate(program);
+      return new ARM64CodeGenerator().load(program).run();
     }
     static interpret(asm) {
-      const interpreter = new ARM64Interpreter();
-      interpreter.loadAssembly(asm);
-      const result = interpreter.execute();
+      const interpreter = new ARM64Interpreter().load(asm);
+      const result = interpreter.run();
       if (result.error) {
         return result.error;
       }
@@ -2830,7 +2669,7 @@ Optimization completed after ${this.stats.passes} passes`);
       const tokens = this.tokenize(source);
       const ast = this.parse(tokens);
       if (optimise) {
-        return this.generate(this.optimise(ast));
+        return this.generate(this.optimise(ast).asm);
       }
       return this.generate(ast);
     }
