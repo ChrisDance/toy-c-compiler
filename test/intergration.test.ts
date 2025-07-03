@@ -1,10 +1,10 @@
 import { execSync } from "child_process";
 import * as fs from "fs";
 import * as path from "path";
-import { working } from "../src/code_samples";
+import { testCases } from "../src/cases";
 import { ARM64CodeGenerator } from "../src/codegen";
 import { Lexer } from "../src/Lexer";
-import { IterativeOptimizer } from "../src/optimiser";
+import { Optimizer } from "../src/optimiser";
 import { Parser } from "../src/parser";
 
 /**
@@ -34,15 +34,15 @@ describe("ARM64 Compiler Integration Tests", () => {
   ): string {
     const outputPath = path.join(testOutputDir, outputFileName);
 
-    const lexer = new Lexer(sourceCode);
-    const tokens = lexer.scanTokens();
-    const parser = new Parser(tokens);
-    let program = parser.parse();
+    const lexer = new Lexer().load(sourceCode);
+    const tokens = lexer.run();
+    const parser = new Parser().load(tokens);
+    let program = parser.run();
     if (optimised) {
-      program = new IterativeOptimizer().optimize(program).optimized;
+      program = new Optimizer().load(program).run().asm;
     }
-    const codeGen = new ARM64CodeGenerator();
-    const assembly = codeGen.generate(program);
+    const codeGen = new ARM64CodeGenerator().load(program);
+    const assembly = codeGen.run();
 
     fs.writeFileSync(outputPath, assembly);
     return outputPath;
@@ -102,8 +102,7 @@ describe("ARM64 Compiler Integration Tests", () => {
     "should compile and execute a comprehensive program with all language features",
     async () => {
       let i = 1;
-      for (const sample of working) {
-        // Sanitize the test name to avoid spaces and special characters in filenames
+      for (const sample of testCases) {
         const sanitizedTestName = `sample_test_${i}`;
         const sanitizedOptimizedTestName = `sample_test_optimized_${i}`;
 
@@ -112,14 +111,15 @@ describe("ARM64 Compiler Integration Tests", () => {
           sanitizedTestName,
           false,
         );
-        // const outputOptimised = await compileAndRun(
-        //   sample.code,
-        //   sanitizedOptimizedTestName,
-        //   true,
-        // );
-        expect(output).toBe(sample.output.toString());
-        // expect(outputOptimised).toBe(sample.output.toString());
+        const outputOptimised = await compileAndRun(
+          sample.code,
+          sanitizedOptimizedTestName,
+          true,
+        );
 
+        // Expect the output to be the same for both
+        expect(output).toBe(sample.output.toString());
+        expect(outputOptimised).toBe(sample.output.toString());
         i++;
       }
     },

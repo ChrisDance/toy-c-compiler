@@ -15,11 +15,7 @@ import {
   WhileStatement,
 } from "./parser";
 
-/* Simple linear-scan register allocator - real compilers use graph coloring with interference analysis */
-
-/*
-
-
+/* linear-scan register allocator: real compilers use graph coloring with interference analysis
 int result = (a + b) * (c + d) * (e + f);
 // Evaluate (a + b)
 generateExpression(a)     // → x0
@@ -36,7 +32,7 @@ rightReg = allocate()     // → x9 (reused!)
 */
 
 class RegisterAllocator {
-  /* Fixed pool of callee-saved registers - real allocators consider register classes and calling conventions */
+  /* fixed pool of callee-saved registers */
   private availableRegs = [
     "x8",
     "x9",
@@ -49,7 +45,7 @@ class RegisterAllocator {
   ];
   private usedRegs: string[] = [];
 
-  /* First-available allocation strategy - real compilers use sophisticated cost models */
+  /* first-available allocation*/
   allocate(): string {
     if (this.availableRegs.length === 0) {
       throw new Error("No more registers available - expression too complex");
@@ -59,7 +55,7 @@ class RegisterAllocator {
     return reg;
   }
 
-  /* Simple pool-based deallocation - real allocators track live ranges and interference */
+  /* simple pool-based deallocation: real allocators track live ranges and interference */
   release(reg: string): void {
     const index = this.usedRegs.indexOf(reg);
     if (index !== -1) {
@@ -68,24 +64,24 @@ class RegisterAllocator {
     }
   }
 
-  /* Per-function reset - real compilers maintain global register state across optimization passes */
+  /* per-function reset: real compilers maintain global register state across optimization passes */
   reset(): void {
     this.availableRegs = ["x8", "x9", "x10", "x11", "x12", "x13", "x14", "x15"];
     this.usedRegs = [];
   }
 
-  /* Fallback detection for stack-based code generation when registers exhausted */
+  /* fallback detection for stack-based code generation when no registers are available*/
   hasAvailable(): boolean {
     return this.availableRegs.length > 0;
   }
 }
 
 export class ARM64CodeGenerator {
+  private ast!: Program;
   private output: string[] = [];
   private currentFunction: string = "";
   private functionEndLabel: string = "";
 
-  /* Stack frame layout tracking - real compilers use sophisticated frame analysis */
   private varLocationMap: Map<string, Map<string, number>> = new Map();
 
   /* String literal pooling - avoids duplicate string constants in output */
@@ -94,38 +90,34 @@ export class ARM64CodeGenerator {
   private stringLiteralCounter: number = 0;
   private regAlloc: RegisterAllocator = new RegisterAllocator();
 
-  /* Per-function stack offset tracking - real compilers do global stack frame optimization */
   private nextOffsetMap: Map<string, number> = new Map();
 
-  /* Hard-coded external function implementations - avoids implementing a full linker */
-  /* Real compilers generate symbol references resolved at link time */
+  /* because there is no way i'm writing a linker, we're going to
+    cheat and hardcode the routines, where we'd otherwise need to
+    generate symbol references resolved at link time */
   private specialFunctions: Record<string, (args: Expression[]) => string[]> = {
     printf: (args: Expression[]) => {
       const formatString = "%ld\\n";
       const label = this.addStringLiteral(formatString);
 
-      /* Special case handling for address-of expressions - demonstrates pointer dereferencing */
-      if (args[0].type === "UnaryExpression") {
+      if (args[0].type === NodeType.UnaryExpression) {
         const unaryExpr = args[0] as UnaryExpression;
 
         if (
           unaryExpr.operator === "&" &&
-          unaryExpr.operand.type === "Identifier"
+          unaryExpr.operand.type === NodeType.Identifier
         ) {
           const varName = (unaryExpr.operand as Identifier).name;
 
-          /* Manual pointer dereferencing - real compilers have sophisticated pointer analysis */
           const offset = this.getVarLocation(this.currentFunction, varName);
 
           if (offset) {
             return [
-              /* Load pointer value then dereference - demonstrates two-level memory access */
-
               `\tldr\tx8, [sp, #${offset}]`,
 
               `\tldr\tx0, [x8]`,
 
-              /* ARM64 calling convention setup for variadic functions */
+              /* arm64 calling convention setup for variadic functions */
               "mov x9, sp",
               "mov x8, x0",
               "str x8, [x9]",
@@ -137,12 +129,10 @@ export class ARM64CodeGenerator {
         }
       }
 
-      /* Standard printf call generation - demonstrates function call code generation */
       const argCode = this.generateExpression(args[0]);
 
       return [
         ...argCode,
-        /* ARM64 variadic function calling convention requires stack setup */
         "mov x9, sp",
         "mov x8, x0",
         "str x8, [x9]",
@@ -158,11 +148,10 @@ export class ARM64CodeGenerator {
         throw new Error("exit() requires exactly one argument (exit code)");
       }
 
-      /* System call generation - real compilers would use library functions */
       const exitCodeExpression = this.generateExpression(args[0]);
       result.push(...exitCodeExpression);
 
-      /* Direct system call instead of library function - educational simplification */
+      /* direct system call instead of library function */
       result.push("\tmov\tx16, #1");
       result.push("\tsvc\t#0x80");
 
@@ -170,25 +159,31 @@ export class ARM64CodeGenerator {
     },
   };
 
-  /* Main entry point - orchestrates the entire code generation process */
-  generate(ast: Program): string {
+  load(ast: Program): ARM64CodeGenerator {
     this.output = [];
     this.varLocationMap.clear();
     this.stringLiterals.clear();
     this.labelCounter = 0;
     this.stringLiteralCounter = 0;
     this.nextOffsetMap.clear();
+    this.ast = ast;
+    return this;
+  }
 
-    /* Assembly file header - target-specific boilerplate */
+  run(): string {
+    if (!this.ast) {
+      throw new Error("No ast loaded in code generator");
+    }
+
+    /* assembly file header with target-specific boilerplate */
     this.addLine("\t.section\t__TEXT,__text,regular,pure_instructions");
     this.addLine("\t.build_version macos, 15, 0\tsdk_version 15, 4");
 
-    /* Process each function in the program - demonstrates single-pass code generation */
-    for (const func of ast.functions) {
+    for (const func of this.ast.functions) {
       this.generateFunction(func);
     }
 
-    /* Generate string literal section - demonstrates constant pooling */
+    /* generate string literal section */
     if (this.stringLiterals.size > 0) {
       this.addLine("");
       this.addLine("\t.section\t__TEXT,__cstring,cstring_literals");
@@ -204,14 +199,12 @@ export class ARM64CodeGenerator {
     return this.output.join("\n");
   }
 
-  /* Assignment statement code generation - demonstrates lvalue/rvalue distinction */
   private generateAssignmentStatement(stmt: any): void {
-    /* Generate rvalue first - ensures proper evaluation order */
+    /* generate rvalue first to ensures proper evaluation order */
     const valueCode = this.generateExpression(stmt.value);
     this.addLines(valueCode);
 
     if (typeof stmt.target === "string") {
-      /* Simple variable assignment - most common case */
       const offset = this.getVarLocation(this.currentFunction, stmt.target);
       if (!offset) {
         throw new Error(
@@ -219,28 +212,24 @@ export class ARM64CodeGenerator {
         );
       }
 
-      /* 64-bit store operations - demonstrates target architecture specificity */
-
       this.addLine(`\tstr\tx0, [sp, #${offset}]`);
     } else if (
-      stmt.target.type === "UnaryExpression" &&
+      stmt.target.type === NodeType.UnaryExpression &&
       stmt.target.operator === "*"
     ) {
-      /* Pointer dereference assignment - demonstrates indirect memory access */
       this.addLine(`\tmov\tx8, x0`);
 
-      /* Generate address computation for pointer target */
+      /* generate address computation for pointer target */
       const ptrCode = this.generateExpression(stmt.target.operand);
       this.addLines(ptrCode);
 
-      /* Store value at computed address - demonstrates pointer semantics */
+      /* store value at computed address - demonstrates pointer semantics */
       this.addLine(`\tstr\tx8, [x0]`);
     } else {
       throw new Error("Invalid assignment target");
     }
   }
 
-  /* Simple variable counting - demonstrates basic static analysis */
   private countLocalVariables(block: BlockStatement): number {
     let count = 0;
 
@@ -251,25 +240,24 @@ export class ARM64CodeGenerator {
     return count;
   }
 
-  /* Recursive variable counting - handles nested blocks */
   private countVariablesInStatement(stmt: Statement): number {
     switch (stmt.type) {
-      case "VariableDeclaration":
+      case NodeType.VariableDeclaration:
         return 1;
 
-      case "BlockStatement":
+      case NodeType.BlockStatement:
         return this.countLocalVariables(stmt);
 
-      case "IfStatement":
+      case NodeType.IfStatement:
         let ifCount = 0;
-        if (stmt.thenBranch.type === "BlockStatement") {
+        if (stmt.thenBranch.type === NodeType.BlockStatement) {
           ifCount += this.countLocalVariables(stmt.thenBranch);
         } else {
           ifCount += this.countVariablesInStatement(stmt.thenBranch);
         }
 
         if (stmt.elseBranch) {
-          if (stmt.elseBranch.type === "BlockStatement") {
+          if (stmt.elseBranch.type === NodeType.BlockStatement) {
             ifCount += this.countLocalVariables(stmt.elseBranch);
           } else {
             ifCount += this.countVariablesInStatement(stmt.elseBranch);
@@ -277,8 +265,8 @@ export class ARM64CodeGenerator {
         }
         return ifCount;
 
-      case "WhileStatement":
-        if (stmt.body.type === "BlockStatement") {
+      case NodeType.WhileStatement:
+        if (stmt.body.type === NodeType.BlockStatement) {
           return this.countLocalVariables(stmt.body);
         } else {
           return this.countVariablesInStatement(stmt.body);
@@ -289,7 +277,6 @@ export class ARM64CodeGenerator {
     }
   }
 
-  /* Stack frame size calculation */
   private calculateStackSizeForFunction(func: FunctionDeclaration): number {
     const baseStackSize = 32;
     /*
@@ -299,32 +286,29 @@ export class ARM64CodeGenerator {
       spill space for register saves 16 bytes;
    */
 
-    /* ARM64 requires 8-byte alignment for parameters for up to 8 parameters*/
+    /* arm64 requires 8-byte alignment for parameters for up to 8 parameters*/
     const parameterSpace = Math.max(32, func.params.length * 8);
 
-    /* Required space for variables in frame */
+    /* required space for variables in frame */
     const localVarCount = this.countLocalVariables(func.body);
     const localVarSpace = localVarCount * 8;
     const tempSpace = 32;
 
-    /* ARM64 ABI requires 16-byte stack alignment */
+    /* arm64 abi requires 16-byte stack alignment */
     const total = baseStackSize + parameterSpace + localVarSpace + tempSpace;
     return Math.ceil(total / 16) * 16;
   }
 
-  /* Function code generation - demonstrates function prologue/epilogue patterns */
-
   private generateFunction(func: FunctionDeclaration): void {
     this.currentFunction = func.name;
-    /* Per-function symbol table - real compilers use global scope analysis */
+    /* per-function symbol table: real compilers use global scope analysis */
     this.varLocationMap.set(func.name, new Map());
 
-    /* Unique label generation for function cleanup - prevents label conflicts */
+    /* unique label generation for function cleanup prevents label conflicts */
     this.functionEndLabel = this.generateLabel("function_end");
 
     this.regAlloc.reset();
 
-    /* Consistent stack layout for all functions */
     this.nextOffsetMap.set(func.name, 16);
 
     this.addLine(
@@ -333,10 +317,9 @@ export class ARM64CodeGenerator {
     this.addLine("\t.p2align\t2");
     this.addLine(`_${func.name}:\t\t\t\t\t\t ; @${func.name}`);
 
-    /* Dynamic stack frame calculation for all functions */
     const totalStackSize = this.calculateStackSizeForFunction(func);
 
-    /* Standard ARM64 function prologue - saves frame pointer and return address */
+    /* standard arm64 function prologue to save frame pointer and return address */
     this.addLine(`\tsub\tsp, sp, #${totalStackSize}`);
     this.addLine(`\tstp\tx29, x30, [sp, #${totalStackSize - 16}]`);
     this.addLine(`\tadd\tx29, sp, #${totalStackSize - 16}`);
@@ -363,18 +346,18 @@ export class ARM64CodeGenerator {
 
     */
 
-    /* Parameter storage - implements ARM64 calling convention */
+    /* parameter storage */
     for (let i = 0; i < func.params.length; i++) {
       const param = func.params[i];
       const offset = this.allocateStackSlot(func.name);
 
       this.setVarLocation(func.name, param.name, offset);
 
-      /* ARM64 calling convention: first 8 parameters in x0-x7 */
+      /* arm64 calling convention: first 8 parameters in x0-x7 */
       if (i < 8) {
         this.addLine(`\tstr\tx${i}, [sp, #${offset}]`);
       } else {
-        /* Limitation: no support for stack-passed parameters */
+        /* limitation: no support for stack-passed parameters */
         throw new Error(
           `Function ${func.name} has more than 8 parameters, which is not supported`,
         );
@@ -383,51 +366,49 @@ export class ARM64CodeGenerator {
 
     this.generateBlock(func.body);
 
-    /* Consistent function end label placement */
+    /* function end label placement */
     this.addLine(`${this.functionEndLabel}:`);
 
-    /* Matching epilogue - restores saved registers and deallocates stack */
+    /* matching epilogue restoring saved registers and deallocates stack */
     this.addLine(`\tldp\tx29, x30, [sp, #${totalStackSize - 16}]`);
     this.addLine(`\tadd\tsp, sp, #${totalStackSize}`);
 
-    /* ARM64 function return instruction */
+    /* return instruction */
     this.addLine("\tret");
     this.addLine("\t\t\t\t\t\t\t ; -- End function");
   }
-  /* Block statement processing - demonstrates sequential code generation */
+
   private generateBlock(block: BlockStatement): void {
     for (const stmt of block.statements) {
       this.generateStatement(stmt);
     }
   }
 
-  /* Return statement handling - demonstrates control flow management */
   private generateReturnStatement(stmt: ReturnStatement): void {
-    /* Generate return value expression if present */
     if (stmt.type == NodeType.ReturnStatement) {
       const exprCode = this.generateExpression(stmt.argument);
       this.addLines(exprCode);
-      /* ARM64 calling convention: return value in x0 */
+      /* return value in x0 */
     }
 
-    /* Jump to function end for consistent cleanup - avoids duplicate epilogue code */
+    /* jump to function end for consistent cleanup to reuse epilogue code */
     this.addLine(`\tb\t${this.functionEndLabel}`);
   }
 
-  /* Statement dispatcher - demonstrates visitor pattern for code generation */
+  /* visitor pattern for code generation */
   private generateStatement(stmt: Statement): void {
     switch (stmt.type) {
-      case "ReturnStatement":
+      case NodeType.ReturnStatement:
         this.generateReturnStatement(stmt);
         break;
-      case "BlockStatement":
+      case NodeType.BlockStatement:
         this.generateBlock(stmt);
         break;
-      case "VariableDeclaration":
+      case NodeType.VariableDeclaration:
         const offset = this.allocateStackSlot(this.currentFunction);
         this.setVarLocation(this.currentFunction, stmt.name, offset);
 
-        if (stmt.init.type === "NumberLiteral") {
+        if (stmt.init.type === NodeType.NumberLiteral) {
           this.addLine(
             `\tmov\tx8, #${stmt.init.value}\t\t\t\t; =0x${stmt.init.value.toString(16)}`,
           );
@@ -439,19 +420,18 @@ export class ARM64CodeGenerator {
         }
         break;
 
-      case "ExpressionStatement":
-        /* Expression statements for side effects - result value discarded */
+      case NodeType.ExpressionStatement:
         const exprCode = this.generateExpression(stmt.expression);
         this.addLines(exprCode);
         break;
-      case "AssignmentStatement":
+      case NodeType.AssignmentStatement:
         this.generateAssignmentStatement(stmt);
         break;
-      case "IfStatement":
+      case NodeType.IfStatement:
         this.generateIfStatement(stmt);
         break;
 
-      case "WhileStatement":
+      case NodeType.WhileStatement:
         this.generateWhileStatement(stmt);
         break;
     }
@@ -478,100 +458,95 @@ export class ARM64CodeGenerator {
     return currentOffset;
   }
 
-  /* While loop code generation - demonstrates structured control flow */
   private generateWhileStatement(stmt: WhileStatement): void {
     const loopStart = this.generateLabel("loop_start");
     const loopEnd = this.generateLabel("loop_end");
 
-    /* Loop entry point - target for continue statements */
+    /* target for continue statements */
     this.addLine(`${loopStart}:`);
 
-    /* Condition evaluation - determines loop continuation */
+    /* determines loop continuation */
     const conditionCode = this.generateExpression(stmt.condition);
     this.addLines(conditionCode);
 
-    /* Conditional branch - ARM64 compare and branch pattern */
+    /*  compare and branch pattern */
     this.addLine("\tcmp\tx0, #0");
     this.addLine(`\tbeq\t${loopEnd}`);
 
-    /* Loop body generation - handles both single statements and blocks */
-    if (stmt.body.type === "BlockStatement") {
+    if (stmt.body.type === NodeType.BlockStatement) {
       this.generateBlock(stmt.body);
     } else {
       this.generateStatement(stmt.body);
     }
 
-    /* Unconditional branch back to condition check */
+    /* branch back to condition check */
     this.addLine(`\tb\t${loopStart}`);
 
-    /* Loop exit point - target for break statements */
+    /* target for break statements */
     this.addLine(`${loopEnd}:`);
   }
 
-  /* If statement code generation - demonstrates conditional control flow */
   private generateIfStatement(stmt: IfStatement): void {
     const endLabel = this.generateLabel("endif");
     const elseLabel = stmt.elseBranch ? this.generateLabel("else") : endLabel;
 
-    /* Condition evaluation - boolean expression to ARM64 comparison */
     const conditionCode = this.generateExpression(stmt.condition);
     this.addLines(conditionCode);
 
-    /* Conditional branch based on false condition - ARM64 branch-on-equal pattern */
+    /* branch based on false condition */
     this.addLine("\tcmp\tx0, #0");
     this.addLine(`\tbeq\t${elseLabel}`);
 
-    /* Then branch code generation */
-    if (stmt.thenBranch.type === "BlockStatement") {
+    /* then branch code generation */
+    if (stmt.thenBranch.type === NodeType.BlockStatement) {
       this.generateBlock(stmt.thenBranch);
     } else {
       this.generateStatement(stmt.thenBranch);
     }
 
-    /* Skip else branch if then branch executed */
+    /* skip else branch if then branch executed */
     if (stmt.elseBranch) {
       this.addLine(`\tb\t${endLabel}`);
       this.addLine(`${elseLabel}:`);
 
-      if (stmt.elseBranch.type === "BlockStatement") {
+      if (stmt.elseBranch.type === NodeType.BlockStatement) {
         this.generateBlock(stmt.elseBranch);
       } else {
         this.generateStatement(stmt.elseBranch);
       }
     }
 
-    /* Common exit point for both branches */
+    /* common exit point for both branches */
     this.addLine(`${endLabel}:`);
   }
 
-  /* Expression code generation dispatcher - demonstrates recursive descent pattern */
+  /* recursive descent pattern */
   private generateExpression(expr: Expression): string[] {
     switch (expr.type) {
-      case "BinaryExpression":
+      case NodeType.BinaryExpression:
         return this.generateBinaryExpression(expr);
-      case "UnaryExpression":
+      case NodeType.UnaryExpression:
         return this.generateUnaryExpression(expr);
-      case "FunctionCall":
+      case NodeType.FunctionCall:
         return this.generateFunctionCall(expr);
-      case "Identifier":
+      case NodeType.Identifier:
         return this.generateIdentifier(expr);
-      case "NumberLiteral":
+      case NodeType.NumberLiteral:
         return this.generateNumberLiteral(expr);
-      case "VoidExpression":
+      case NodeType.VoidExpression:
         return [];
       default:
         return [];
     }
   }
 
-  /* Unary expression handling - demonstrates address-of and dereference operations */
   private generateUnaryExpression(expr: UnaryExpression): string[] {
     const result: string[] = [];
 
     switch (expr.operator) {
       case "&":
-        if (expr.operand.type === "Identifier") {
-          /* Address calculation - demonstrates lvalue to rvalue conversion */
+        if (expr.operand.type === NodeType.Identifier) {
+          /* address calculation: lvalue to rvalue conversion */
           const offset = this.getVarLocation(
             this.currentFunction,
             expr.operand.name,
@@ -580,7 +555,7 @@ export class ARM64CodeGenerator {
             throw new Error(`Variable not found: ${expr.operand.name}`);
           }
 
-          /* ARM64 address arithmetic - lea equivalent */
+          /* address arithmetic: load effective address equivalent */
 
           result.push(`\tadd\tx0, sp, #${offset}`);
         } else {
@@ -591,10 +566,10 @@ export class ARM64CodeGenerator {
         break;
 
       case "*":
-        /* Pointer dereferencing - demonstrates indirect memory access */
+        /* pointer dereferencing */
         const addressCode = this.generateExpression(expr.operand);
         result.push(...addressCode);
-        /* Load value from computed address - ARM64 indirect load */
+        /* load value from computed address */
         result.push(`\tldr\tx0, [x0]`);
         break;
 
@@ -605,32 +580,27 @@ export class ARM64CodeGenerator {
     return result;
   }
 
-  /* Binary expression code generation - demonstrates register allocation challenges */
   private generateBinaryExpression(expr: BinaryExpression): string[] {
     const result: string[] = [];
 
-    /* Register availability check - fallback to stack-based evaluation */
+    /* check we have registers available */
     if (!this.regAlloc.hasAvailable()) {
       return this.generateBinaryExpressionStackBased(expr);
     }
 
-    /* Left operand evaluation - demonstrates evaluation order */
     const leftCode = this.generateExpression(expr.left);
     result.push(...leftCode);
 
-    /* Register allocation for intermediate results */
+    /* register allocation for intermediate results */
     const leftReg = this.regAlloc.allocate();
     result.push(`\tmov\t${leftReg}, x0`);
 
-    /* Right operand evaluation - may clobber x0 */
     const rightCode = this.generateExpression(expr.right);
     result.push(...rightCode);
 
-    /* Second register allocation */
     const rightReg = this.regAlloc.allocate();
     result.push(`\tmov\t${rightReg}, x0`);
 
-    /* ARM64 arithmetic and comparison operations */
     switch (expr.operator) {
       case "*":
         result.push(`\tmul\tx0, ${leftReg}, ${rightReg}`);
@@ -645,7 +615,6 @@ export class ARM64CodeGenerator {
         result.push(`\tsdiv\tx0, ${leftReg}, ${rightReg}`);
         break;
       case "<":
-        /* Comparison operations produce boolean results */
         result.push(`\tcmp\t${leftReg}, ${rightReg}`);
         result.push("\tcset\tx0, lt");
         break;
@@ -661,35 +630,30 @@ export class ARM64CodeGenerator {
         throw new Error(`Unsupported binary operator: ${expr.operator}`);
     }
 
-    /* Register deallocation - returns registers to available pool */
+    /* release registers */
     this.regAlloc.release(leftReg);
     this.regAlloc.release(rightReg);
 
     return result;
   }
 
-  /* Stack-based expression evaluation - fallback when registers exhausted */
+  /* stack-based expression evaluation for when no available registers */
   private generateBinaryExpressionStackBased(expr: BinaryExpression): string[] {
     const result: string[] = [];
 
-    /* Left operand evaluation and stack storage */
     const leftCode = this.generateExpression(expr.left);
     result.push(...leftCode);
 
-    /* Manual stack management - real compilers use virtual registers */
     result.push("\tsub\tsp, sp, #16");
     result.push("\tstr\tx0, [sp]");
 
-    /* Right operand evaluation */
     const rightCode = this.generateExpression(expr.right);
     result.push(...rightCode);
     result.push("\tmov\tx9, x0");
 
-    /* Stack value restoration */
     result.push("\tldr\tx8, [sp]");
     result.push("\tadd\tsp, sp, #16");
 
-    /* Same arithmetic operations as register-based version */
     switch (expr.operator) {
       case "*":
         result.push("\tmul\tx0, x8, x9");
@@ -722,9 +686,8 @@ export class ARM64CodeGenerator {
     return result;
   }
 
-  /* Function call code generation - demonstrates calling convention implementation */
   private generateFunctionCall(expr: FunctionCall): string[] {
-    /* Special function handling - avoids full symbol resolution */
+    /* special function handling to avoid full symbol resolution */
     if (expr.callee in this.specialFunctions) {
       return this.specialFunctions[expr.callee](expr.arguments);
     }
@@ -741,13 +704,11 @@ export class ARM64CodeGenerator {
       throw new Error("More than 8 function arguments not supported");
     }
 
-    /* Zero-argument function calls - simplest case */
     if (expr.arguments.length === 0) {
       result.push(`\tbl\t_${expr.callee}`);
       return result;
     }
 
-    /* Single argument optimization - avoids register juggling */
     if (expr.arguments.length === 1) {
       const argCode = this.generateExpression(expr.arguments[0]);
       result.push(...argCode);
@@ -756,35 +717,31 @@ export class ARM64CodeGenerator {
       return result;
     }
 
-    /* Multiple argument handling - demonstrates parameter passing complexity */
     const tempStackOffsets: number[] = [];
 
-    /* Argument evaluation and temporary storage - avoids register conflicts */
     for (let i = 0; i < expr.arguments.length; i++) {
       const argCode = this.generateExpression(expr.arguments[i]);
       result.push(...argCode);
 
-      /* Temporary stack allocation for argument preservation */
       const tempOffset = this.allocateStackSlot(this.currentFunction);
       tempStackOffsets.push(tempOffset);
 
-      /* Store argument result to temporary location - now consistent for all functions */
       result.push(`\tstr\tx0, [sp, #${tempOffset}]`);
     }
 
-    /* Load arguments into ARM64 parameter registers x0-x7 */
+    /* load arguments into parameter registers x0-x7 */
     for (let i = 0; i < expr.arguments.length; i++) {
       const tempOffset = tempStackOffsets[i];
       result.push(`\tldr\tx${i}, [sp, #${tempOffset}]`);
     }
 
-    /* Function call with properly loaded arguments */
+    /* function call with properly loaded arguments */
     result.push(`\tbl\t_${expr.callee}`);
 
     return result;
   }
 
-  /* Variable access code generation; symbol table lookup */
+  /* variable access code generation; symbol table lookup */
   private generateIdentifier(expr: Identifier): string[] {
     const offset = this.getVarLocation(this.currentFunction, expr.name);
 
@@ -797,7 +754,7 @@ export class ARM64CodeGenerator {
     return [`\tldr\tx0, [sp, #${offset}]`];
   }
 
-  /* Literal constant loading; demonstrates immediate value handling */
+  /* literal constant loading; demonstrates immediate value handling */
   private generateNumberLiteral(expr: NumberLiteral): string[] {
     /*
     In ARM64 assembly, when you write mov x0, #123, you're asking the processor to load the literal value 123 directly into register x0.
@@ -825,7 +782,6 @@ export class ARM64CodeGenerator {
     return [`\tmov\tx0, #${expr.value}\t\t\t\t; =0x${expr.value.toString(16)}`];
   }
 
-  /* Unique label generation; prevents assembly-time conflicts */
   private generateLabel(prefix: string): string {
     const label = `L${this.labelCounter++}_${prefix}`;
     return label;
@@ -839,7 +795,7 @@ export class ARM64CodeGenerator {
     this.output.push(...lines);
   }
 
-  /* Variable location tracking; maintains symbol table per function */
+  /* variable location tracking; maintains symbol table per function */
   private setVarLocation(
     funcName: string,
     varName: string,
@@ -855,7 +811,6 @@ export class ARM64CodeGenerator {
     varMap.set(varName, offset);
   }
 
-  /* Variable location lookup and symbol resolution for code generation */
   private getVarLocation(
     funcName: string,
     varName: string,
@@ -869,7 +824,6 @@ export class ARM64CodeGenerator {
     return varMap.get(varName);
   }
 
-  /* String literal management; constant pooling for efficiency */
   private addStringLiteral(value: string): string {
     const label = `l_.str.${this.stringLiteralCounter++}`;
     this.stringLiterals.set(label, value);

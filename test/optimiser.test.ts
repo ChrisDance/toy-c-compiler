@@ -1,17 +1,17 @@
 // test/optimiser.test.ts
 import { Lexer } from "../src/Lexer";
-import { IterativeOptimizer } from "../src/optimiser";
+import { Optimizer } from "../src/optimiser";
 import { Parser } from "../src/parser";
 
 describe("Enhanced Pointer-Safe Optimizer Integration Tests", () => {
   function optimizeCode(input: string, maxPasses = 10) {
-    const lexer = new Lexer(input);
-    const tokens = lexer.scanTokens();
-    const parser = new Parser(tokens);
-    const program = parser.parse();
+    const lexer = new Lexer().load(input);
+    const tokens = lexer.run();
+    const parser = new Parser().load(tokens);
+    const program = parser.run();
 
-    const optimizer = new IterativeOptimizer();
-    return optimizer.optimize(program, maxPasses);
+    const optimizer = new Optimizer().load(program);
+    return optimizer.run(maxPasses);
   }
 
   describe("Pointer Safety Tests", () => {
@@ -26,7 +26,7 @@ describe("Enhanced Pointer-Safe Optimizer Integration Tests", () => {
         }
       `;
 
-      const { optimized, stats } = optimizeCode(input);
+      const { asm, stats } = optimizeCode(input);
 
       expect(stats.pointersDetected).toBeGreaterThan(0);
       expect(stats.passes).toBeGreaterThan(0);
@@ -51,7 +51,7 @@ describe("Enhanced Pointer-Safe Optimizer Integration Tests", () => {
         }
       `;
 
-      const { optimized, stats } = optimizeCode(input);
+      const { asm, stats } = optimizeCode(input);
 
       expect(stats.pointersDetected).toBeGreaterThan(0);
       expect(stats.functionsRemoved).toBe(0); // Both functions should be kept
@@ -72,7 +72,7 @@ describe("Enhanced Pointer-Safe Optimizer Integration Tests", () => {
         }
       `;
 
-      const { optimized, stats } = optimizeCode(input);
+      const { asm, stats } = optimizeCode(input);
 
       expect(stats.pointersDetected).toBeGreaterThan(0);
       expect(stats.functionsRemoved).toBe(0);
@@ -90,7 +90,7 @@ describe("Enhanced Pointer-Safe Optimizer Integration Tests", () => {
         }
       `;
 
-      const { optimized, stats } = optimizeCode(input);
+      const { asm, stats } = optimizeCode(input);
 
       expect(stats.pointersDetected).toBeGreaterThan(0);
       // Should preserve all pointer operations
@@ -109,7 +109,7 @@ describe("Enhanced Pointer-Safe Optimizer Integration Tests", () => {
         }
       `;
 
-      const { optimized, stats } = optimizeCode(input);
+      const { asm, stats } = optimizeCode(input);
 
       expect(stats.pointersDetected).toBeGreaterThan(0);
       // No constant propagation should occur on a, b due to address taken
@@ -128,7 +128,7 @@ describe("Enhanced Pointer-Safe Optimizer Integration Tests", () => {
         }
       `;
 
-      const { optimized, stats } = optimizeCode(input);
+      const { asm, stats } = optimizeCode(input);
 
       expect(stats.pointersDetected).toBeGreaterThan(0);
       expect(stats.constantFolding).toBeGreaterThan(0); // Should optimize y = 2 + 3
@@ -146,7 +146,7 @@ describe("Enhanced Pointer-Safe Optimizer Integration Tests", () => {
         }
       `;
 
-      const { optimized, stats } = optimizeCode(input);
+      const { asm, stats } = optimizeCode(input);
 
       expect(stats.pointersDetected).toBeGreaterThan(0);
       // No constant folding should occur due to pointer operations
@@ -168,7 +168,7 @@ describe("Enhanced Pointer-Safe Optimizer Integration Tests", () => {
         }
       `;
 
-      const { optimized, stats } = optimizeCode(input);
+      const { asm, stats } = optimizeCode(input);
 
       expect(stats.pointersDetected).toBeGreaterThan(0);
       expect(stats.constantFolding).toBeGreaterThan(0); // Should optimize 2 + 3
@@ -189,7 +189,7 @@ describe("Enhanced Pointer-Safe Optimizer Integration Tests", () => {
         }
       `;
 
-      const { optimized, stats } = optimizeCode(input);
+      const { asm, stats } = optimizeCode(input);
 
       expect(stats.pointersDetected).toBeGreaterThan(0);
       // Both x and y should be detected as having address taken
@@ -212,7 +212,7 @@ describe("Enhanced Pointer-Safe Optimizer Integration Tests", () => {
         }
       `;
 
-      const { optimized, stats } = optimizeCode(input);
+      const { asm, stats } = optimizeCode(input);
 
       expect(stats.pointersDetected).toBeGreaterThan(0);
       // Should not optimize the if condition or assignments
@@ -233,7 +233,7 @@ describe("Enhanced Pointer-Safe Optimizer Integration Tests", () => {
         }
       `;
 
-      const { optimized, stats } = optimizeCode(input);
+      const { asm, stats } = optimizeCode(input);
 
       expect(stats.pointersDetected).toBeGreaterThan(0);
       // Should not optimize the while condition or loop body
@@ -256,7 +256,7 @@ describe("Enhanced Pointer-Safe Optimizer Integration Tests", () => {
         }
       `;
 
-      const { optimized, stats } = optimizeCode(input);
+      const { asm, stats } = optimizeCode(input);
 
       expect(stats.pointersDetected).toBe(0); // No pointers in this code
       expect(stats.constantFolding).toBeGreaterThanOrEqual(4);
@@ -274,7 +274,7 @@ describe("Enhanced Pointer-Safe Optimizer Integration Tests", () => {
         }
       `;
 
-      const { optimized, stats } = optimizeCode(input);
+      const { asm, stats } = optimizeCode(input);
 
       expect(stats.pointersDetected).toBe(0);
       expect(stats.constantPropagation).toBeGreaterThan(0);
@@ -293,7 +293,7 @@ describe("Enhanced Pointer-Safe Optimizer Integration Tests", () => {
         }
       `;
 
-      const { optimized, stats } = optimizeCode(input);
+      const { asm, stats } = optimizeCode(input);
 
       expect(stats.pointersDetected).toBe(0);
       expect(stats.algebraicSimplification).toBeGreaterThan(0);
@@ -309,7 +309,7 @@ describe("Enhanced Pointer-Safe Optimizer Integration Tests", () => {
         }
       `;
 
-      const { optimized, stats } = optimizeCode(input);
+      const { asm, stats } = optimizeCode(input);
 
       expect(stats.pointersDetected).toBe(0);
       expect(stats.deadCodeElimination).toBeGreaterThan(0);
@@ -332,7 +332,7 @@ describe("Enhanced Pointer-Safe Optimizer Integration Tests", () => {
         }
       `;
 
-      const { optimized, stats } = optimizeCode(input);
+      const { asm, stats } = optimizeCode(input);
 
       expect(stats.constantFolding).toBeGreaterThanOrEqual(4);
       expect(stats.passes).toBeGreaterThan(0);
@@ -351,7 +351,7 @@ describe("Enhanced Pointer-Safe Optimizer Integration Tests", () => {
         }
       `;
 
-      const { optimized, stats } = optimizeCode(input);
+      const { asm, stats } = optimizeCode(input);
 
       expect(stats.constantFolding).toBeGreaterThanOrEqual(3);
     });
@@ -365,7 +365,7 @@ describe("Enhanced Pointer-Safe Optimizer Integration Tests", () => {
         }
       `;
 
-      const { optimized, stats } = optimizeCode(input);
+      const { asm, stats } = optimizeCode(input);
 
       expect(stats.constantFolding).toBeGreaterThanOrEqual(3);
     });
@@ -383,7 +383,7 @@ describe("Enhanced Pointer-Safe Optimizer Integration Tests", () => {
         }
       `;
 
-      const { optimized, stats } = optimizeCode(input);
+      const { asm, stats } = optimizeCode(input);
 
       expect(stats.constantPropagation).toBeGreaterThan(0);
       expect(stats.constantFolding).toBeGreaterThan(0);
@@ -403,7 +403,7 @@ describe("Enhanced Pointer-Safe Optimizer Integration Tests", () => {
         }
       `;
 
-      const { optimized, stats } = optimizeCode(input);
+      const { asm, stats } = optimizeCode(input);
 
       expect(stats.passes).toBeGreaterThan(0);
       expect(stats.constantPropagation).toBeGreaterThan(0);
@@ -422,7 +422,7 @@ describe("Enhanced Pointer-Safe Optimizer Integration Tests", () => {
         }
       `;
 
-      const { optimized, stats } = optimizeCode(input);
+      const { asm, stats } = optimizeCode(input);
 
       expect(stats.constantFolding).toBeGreaterThan(0);
       expect(stats.deadCodeElimination).toBeGreaterThan(0);
@@ -441,7 +441,7 @@ describe("Enhanced Pointer-Safe Optimizer Integration Tests", () => {
         }
       `;
 
-      const { optimized, stats } = optimizeCode(input);
+      const { asm, stats } = optimizeCode(input);
 
       expect(stats.deadCodeElimination).toBeGreaterThan(0);
     });
@@ -456,7 +456,7 @@ describe("Enhanced Pointer-Safe Optimizer Integration Tests", () => {
         }
       `;
 
-      const { optimized, stats } = optimizeCode(input);
+      const { asm, stats } = optimizeCode(input);
 
       expect(stats.deadCodeElimination).toBeGreaterThan(0);
     });
@@ -473,7 +473,7 @@ describe("Enhanced Pointer-Safe Optimizer Integration Tests", () => {
         }
       `;
 
-      const { optimized, stats } = optimizeCode(input);
+      const { asm, stats } = optimizeCode(input);
 
       expect(stats.constantFolding).toBeGreaterThan(0);
       expect(stats.deadCodeElimination).toBeGreaterThan(0);
@@ -496,12 +496,12 @@ describe("Enhanced Pointer-Safe Optimizer Integration Tests", () => {
         }
       `;
 
-      const { optimized, stats } = optimizeCode(input);
+      const { asm, stats } = optimizeCode(input);
 
       expect(stats.constantFolding).toBeGreaterThan(0);
       expect(stats.constantPropagation).toBeGreaterThan(0);
       expect(stats.algebraicSimplification).toBeGreaterThan(0);
-      expect(optimized.functions.length).toBe(2);
+      expect(asm.functions.length).toBe(2);
     });
 
     test("should eliminate unused functions", () => {
@@ -516,11 +516,11 @@ describe("Enhanced Pointer-Safe Optimizer Integration Tests", () => {
         }
       `;
 
-      const { optimized, stats } = optimizeCode(input);
+      const { asm, stats } = optimizeCode(input);
 
       expect(stats.functionsRemoved).toBe(1);
-      expect(optimized.functions.length).toBe(1);
-      expect(optimized.functions[0].name).toBe("main");
+      expect(asm.functions.length).toBe(1);
+      expect(asm.functions[0].name).toBe("main");
     });
   });
 
@@ -541,7 +541,7 @@ describe("Enhanced Pointer-Safe Optimizer Integration Tests", () => {
         }
       `;
 
-      const { optimized, stats } = optimizeCode(input, 10);
+      const { asm, stats } = optimizeCode(input, 10);
 
       expect(stats.passes).toBeGreaterThan(2);
       expect(stats.constantPropagation).toBeGreaterThan(0);
@@ -566,7 +566,7 @@ describe("Enhanced Pointer-Safe Optimizer Integration Tests", () => {
         }
       `;
 
-      const { optimized, stats } = optimizeCode(input, 10);
+      const { asm, stats } = optimizeCode(input, 10);
 
       expect(stats.pointersDetected).toBeGreaterThan(0);
       expect(stats.constantFolding).toBeGreaterThan(0); // Should optimize 5 + 3
@@ -587,7 +587,7 @@ describe("Enhanced Pointer-Safe Optimizer Integration Tests", () => {
         }
       `;
 
-      const { optimized, stats } = optimizeCode(input, 15);
+      const { asm, stats } = optimizeCode(input, 15);
 
       expect(stats.passes).toBeGreaterThan(2);
       expect(
@@ -610,7 +610,7 @@ describe("Enhanced Pointer-Safe Optimizer Integration Tests", () => {
         }
       `;
 
-      const { optimized, stats } = optimizeCode(input);
+      const { asm, stats } = optimizeCode(input);
 
       expect(stats.passes).toBeGreaterThan(0);
       expect(stats.totalOptimizations).toBe(
@@ -637,7 +637,7 @@ describe("Enhanced Pointer-Safe Optimizer Integration Tests", () => {
         }
       `;
 
-      const { optimized, stats } = optimizeCode(input);
+      const { asm, stats } = optimizeCode(input);
 
       expect(stats.pointersDetected).toBeGreaterThan(0);
       expect(stats.passes).toBeGreaterThan(0);
@@ -651,7 +651,7 @@ describe("Enhanced Pointer-Safe Optimizer Integration Tests", () => {
         }
       `;
 
-      const { optimized, stats } = optimizeCode(input);
+      const { asm, stats } = optimizeCode(input);
 
       expect(stats.pointersDetected).toBe(0);
       expect(stats.passes).toBeGreaterThan(0);
@@ -679,7 +679,7 @@ describe("Enhanced Pointer-Safe Optimizer Integration Tests", () => {
         }
       `;
 
-      const { optimized, stats } = optimizeCode(input);
+      const { asm, stats } = optimizeCode(input);
 
       expect(stats.pointersDetected).toBeGreaterThan(0);
       // Should handle complex pointer aliasing safely by not optimizing
@@ -703,14 +703,13 @@ describe("Enhanced Pointer-Safe Optimizer Integration Tests", () => {
         }
       `;
 
-      const { optimized, stats } = optimizeCode(input);
+      const { asm, stats } = optimizeCode(input);
 
       expect(stats.pointersDetected).toBeGreaterThan(0);
       expect(stats.functionsRemoved).toBe(0);
     });
 
     test("should safely handle when no main function with pointers", () => {
-      // This should be caught by the existing main function validation
       const input = `
         int* helper() {
           int x = 5;

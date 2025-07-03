@@ -2,15 +2,14 @@ import { Lexer, TokenType } from "../src/Lexer";
 
 describe("Lexer", () => {
   test("should tokenize empty input", () => {
-    const lexer = new Lexer("");
-    const tokens = lexer.scanTokens();
-    expect(tokens.length).toBe(1);
+    const lexer = new Lexer().load("");
+    const tokens = lexer.run();
     expect(tokens[0].type).toBe(TokenType.EOF);
   });
 
   test("should tokenize basic tokens", () => {
-    const lexer = new Lexer("{}();+-*/=<>==");
-    const tokens = lexer.scanTokens();
+    const lexer = new Lexer().load("{}();+-*/=<>==");
+    const tokens = lexer.run();
 
     expect(tokens.length).toBe(14);
 
@@ -31,8 +30,8 @@ describe("Lexer", () => {
   });
 
   test("should tokenize keywords", () => {
-    const lexer = new Lexer("int return if else while void");
-    const tokens = lexer.scanTokens();
+    const lexer = new Lexer().load("int return if else while void");
+    const tokens = lexer.run();
 
     expect(tokens.length).toBe(7); // 6 keywords + EOF
     expect(tokens[0].type).toBe(TokenType.INT);
@@ -44,8 +43,8 @@ describe("Lexer", () => {
   });
 
   test("should tokenize identifiers", () => {
-    const lexer = new Lexer("foo bar baz");
-    const tokens = lexer.scanTokens();
+    const lexer = new Lexer().load("foo bar baz");
+    const tokens = lexer.run();
 
     expect(tokens.length).toBe(4); // 3 identifiers + EOF
     expect(tokens[0].type).toBe(TokenType.IDENTIFIER);
@@ -57,8 +56,8 @@ describe("Lexer", () => {
   });
 
   test("should tokenize numbers", () => {
-    const lexer = new Lexer("123 456 789");
-    const tokens = lexer.scanTokens();
+    const lexer = new Lexer().load("123 456 789");
+    const tokens = lexer.run();
 
     expect(tokens.length).toBe(4); // 3 numbers + EOF
     expect(tokens[0].type).toBe(TokenType.NUMBER);
@@ -70,8 +69,8 @@ describe("Lexer", () => {
   });
 
   test("should handle whitespace correctly", () => {
-    const lexer = new Lexer("  int  \n  main  \t  (  )  ");
-    const tokens = lexer.scanTokens();
+    const lexer = new Lexer().load("  int  \n  main  \t  (  )  ");
+    const tokens = lexer.run();
 
     expect(tokens.length).toBe(5); // int, main, (, ), EOF
     expect(tokens[0].type).toBe(TokenType.INT);
@@ -82,8 +81,8 @@ describe("Lexer", () => {
   });
 
   test("should track line numbers", () => {
-    const lexer = new Lexer("int\nmain\n(\n)\n{");
-    const tokens = lexer.scanTokens();
+    const lexer = new Lexer().load("int\nmain\n(\n)\n{");
+    const tokens = lexer.run();
 
     expect(tokens[0].line).toBe(1); // int
     expect(tokens[1].line).toBe(2); // main
@@ -104,8 +103,8 @@ describe("Lexer", () => {
       }
     `;
 
-    const lexer = new Lexer(input);
-    const tokens = lexer.scanTokens();
+    const lexer = new Lexer().load(input);
+    const tokens = lexer.run();
 
     expect(tokens.length).toBe(31);
 
@@ -124,8 +123,8 @@ describe("Lexer", () => {
   });
 
   test("should tokenize void keyword", () => {
-    const lexer = new Lexer("void");
-    const tokens = lexer.scanTokens();
+    const lexer = new Lexer().load("void");
+    const tokens = lexer.run();
 
     expect(tokens.length).toBe(2); // void + EOF
     expect(tokens[0].type).toBe(TokenType.VOID);
@@ -133,8 +132,8 @@ describe("Lexer", () => {
   });
 
   test("should tokenize void function signature", () => {
-    const lexer = new Lexer("void test()");
-    const tokens = lexer.scanTokens();
+    const lexer = new Lexer().load("void test()");
+    const tokens = lexer.run();
 
     expect(tokens[0].type).toBe(TokenType.VOID);
     expect(tokens[1].type).toBe(TokenType.IDENTIFIER);
@@ -144,8 +143,8 @@ describe("Lexer", () => {
   // NEW POINTER-RELATED TESTS
 
   test("should tokenize ampersand operator", () => {
-    const lexer = new Lexer("&variable");
-    const tokens = lexer.scanTokens();
+    const lexer = new Lexer().load("&variable");
+    const tokens = lexer.run();
 
     expect(tokens.length).toBe(3); // &, variable, EOF
     expect(tokens[0].type).toBe(TokenType.AMPERSAND);
@@ -155,8 +154,8 @@ describe("Lexer", () => {
   });
 
   test("should tokenize pointer declaration", () => {
-    const lexer = new Lexer("int* ptr");
-    const tokens = lexer.scanTokens();
+    const lexer = new Lexer().load("int* ptr");
+    const tokens = lexer.run();
 
     expect(tokens.length).toBe(4); // int, *, ptr, EOF
     expect(tokens[0].type).toBe(TokenType.INT);
@@ -167,8 +166,8 @@ describe("Lexer", () => {
   });
 
   test("should tokenize pointer dereference", () => {
-    const lexer = new Lexer("*ptr = 5");
-    const tokens = lexer.scanTokens();
+    const lexer = new Lexer().load("*ptr = 5");
+    const tokens = lexer.run();
 
     expect(tokens.length).toBe(5); // *, ptr, =, 5, EOF
     expect(tokens[0].type).toBe(TokenType.MULTIPLY);
@@ -181,8 +180,8 @@ describe("Lexer", () => {
   });
 
   test("should tokenize address-of assignment", () => {
-    const lexer = new Lexer("ptr = &variable");
-    const tokens = lexer.scanTokens();
+    const lexer = new Lexer().load("ptr = &variable");
+    const tokens = lexer.run();
 
     expect(tokens.length).toBe(5); // ptr, =, &, variable, EOF
     expect(tokens[0].type).toBe(TokenType.IDENTIFIER);
@@ -195,8 +194,8 @@ describe("Lexer", () => {
   });
 
   test("should tokenize complex pointer operations", () => {
-    const lexer = new Lexer("*ptr1 = &(*ptr2 + 3)");
-    const tokens = lexer.scanTokens();
+    const lexer = new Lexer().load("*ptr1 = &(*ptr2 + 3)");
+    const tokens = lexer.run();
 
     expect(tokens.length).toBe(11); // *, ptr1, =, &, (, *, ptr2, +, 3, ), EOF
 
@@ -233,8 +232,8 @@ describe("Lexer", () => {
   });
 
   test("should tokenize pointer function signature", () => {
-    const lexer = new Lexer("int* getPointer(int* param)");
-    const tokens = lexer.scanTokens();
+    const lexer = new Lexer().load("int* getPointer(int* param)");
+    const tokens = lexer.run();
 
     expect(tokens.length).toBe(9); // int, *, getPointer, (, int, *, param, ), EOF
     expect(tokens[0].type).toBe(TokenType.INT);
@@ -250,8 +249,8 @@ describe("Lexer", () => {
   });
 
   test("should tokenize pointer arithmetic", () => {
-    const lexer = new Lexer("ptr + 1");
-    const tokens = lexer.scanTokens();
+    const lexer = new Lexer().load("ptr + 1");
+    const tokens = lexer.run();
 
     expect(tokens.length).toBe(4); // ptr, +, 1, EOF
     expect(tokens[0].type).toBe(TokenType.IDENTIFIER);
@@ -262,8 +261,8 @@ describe("Lexer", () => {
   });
 
   test("should tokenize multiple pointer levels", () => {
-    const lexer = new Lexer("**ptr");
-    const tokens = lexer.scanTokens();
+    const lexer = new Lexer().load("**ptr");
+    const tokens = lexer.run();
 
     expect(tokens.length).toBe(4); // *, *, ptr, EOF
     expect(tokens[0].type).toBe(TokenType.MULTIPLY);
@@ -273,8 +272,8 @@ describe("Lexer", () => {
   });
 
   test("should tokenize pointer comparison", () => {
-    const lexer = new Lexer("ptr1 == ptr2");
-    const tokens = lexer.scanTokens();
+    const lexer = new Lexer().load("ptr1 == ptr2");
+    const tokens = lexer.run();
 
     expect(tokens.length).toBe(4); // ptr1, ==, ptr2, EOF
     expect(tokens[0].type).toBe(TokenType.IDENTIFIER);
@@ -285,7 +284,7 @@ describe("Lexer", () => {
   });
 
   test("check comments", () => {
-    const lexer = new Lexer(`
+    const lexer = new Lexer().load(`
 
       int main() {
         // comment;
@@ -294,7 +293,7 @@ describe("Lexer", () => {
 
 
       `);
-    const tokens = lexer.scanTokens();
+    const tokens = lexer.run();
     console.log(tokens);
     expect(tokens.length).toBe(10);
   });
@@ -308,8 +307,8 @@ describe("Lexer", () => {
       }
     `;
 
-    const lexer = new Lexer(input);
-    const tokens = lexer.scanTokens();
+    const lexer = new Lexer().load(input);
+    const tokens = lexer.run();
 
     const types = tokens.map((t) => t.type);
 

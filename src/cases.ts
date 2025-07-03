@@ -1,9 +1,6 @@
 export type CodeSample = { code: string; output: number };
-export const code_samples: CodeSample[] = [];
 
-export const working = [
-  //  TEST data
-
+export const testCases: CodeSample[] = [
   {
     code: `
     void callWPtr(int * ptr)
@@ -75,7 +72,7 @@ export const working = [
     printf(0);
     return 0;
   }`,
-    output: 0, // Last printf outputs 3 (after count becomes 3, loop exits)
+    output: 0,
   },
   {
     code: `int main() {
@@ -84,12 +81,9 @@ export const working = [
     printf(b);
     return 0;
   }`,
-    output: 5, // a = 5 * 1 = 5, b = 5 / 1 + 0 = 5
+    output: 5,
   },
-  // Test 5: While loops with assignment statements
-  // code_samples[0],
-  //
-  // Test exit
+
   {
     code: `int main() {
     int a = 2 + 3;
@@ -102,7 +96,7 @@ export const working = [
     }
     return 0;
   }`,
-    output: 5, // All operations simplify to 5
+    output: 5,
   },
   {
     code: `
@@ -116,7 +110,7 @@ export const working = [
    `,
     output: "",
   },
-  // Test for multiple args
+
   {
     code: `
 
@@ -133,7 +127,7 @@ export const working = [
     `,
     output: 10,
   },
-  // Test case for recursion:
+
   {
     code: `int recurse(int n) {
               int i = n;
@@ -152,8 +146,7 @@ export const working = [
       }`,
     output: 6,
   },
-  // Test 1: Function calls with nested expressions and control flow
-  //
+
   {
     code: `
 
@@ -173,7 +166,7 @@ export const working = [
   }`,
     output: 5,
   },
-  //Test 2: While loops (FIXED - added parameter)
+
   {
     code: `
     int testWhile(int k) {
@@ -188,7 +181,7 @@ export const working = [
   }`,
     output: 3,
   },
-  // Test 3: Algebraic simplification and dead function elimination
+
   {
     code: `int redundant() {
     return 5;
@@ -205,7 +198,7 @@ export const working = [
   }`,
     output: 5,
   },
-  //Test 4: Constant propagation through control flow (FIXED - added printf)
+
   {
     code: `int main() {
     int x = 3;
@@ -219,10 +212,9 @@ export const working = [
     printf(z);
     return 0;
   }`,
-    output: 40, // x=3, y=10, z initially 20, but since x<y, z becomes 3*10+10 = 40
+    output: 40,
   },
 
-  // Test 6: Unreachable code elimination
   {
     code: `int main() {
     if (5 > 10) {
@@ -236,7 +228,6 @@ export const working = [
     output: 42,
   },
 
-  // Test 8: Assignment statements with optimization
   {
     code: `int main() {
     int x = 10;
@@ -248,7 +239,6 @@ export const working = [
     output: 15,
   },
 
-  // Test 10: Dead variable elimination
   {
     code: `int main() {
     int unused1 = 42;
@@ -259,7 +249,7 @@ export const working = [
   }`,
     output: 10,
   },
-  // Test 11: Nested function calls with optimization
+
   {
     code: `int Double(int x) {
     return x * 2;
@@ -273,9 +263,9 @@ export const working = [
     printf(result);
     return 0;
   }`,
-    output: 10, // Add(5) = 5, Double(5) = 10
+    output: 10,
   },
-  // Test 13: Loop with constant condition (should be eliminated)
+
   {
     code: `int main() {
     int sum = 0;
@@ -286,9 +276,9 @@ export const working = [
     printf(sum);
     return 0;
   }`,
-    output: 0, // Loop never executes, sum remains 0
+    output: 0,
   },
-  // Test 14: Comparison operators testing
+
   {
     code: `int main() {
     int x = 10;
@@ -304,9 +294,9 @@ export const working = [
     }
     return 0;
   }`,
-    output: 1, // Only first condition is true (10 > 5)
+    output: 1,
   },
-  // // Test 15: Function with optimization potential
+
   {
     code: `int Calculate(int input) {
     int temp = input + 0;
@@ -317,9 +307,9 @@ export const working = [
     printf(Calculate(42));
     return 0;
   }`,
-    output: 42, // All operations are identity operations, returns input
+    output: 42,
   },
-  // //Test 16 bigger stack
+
   {
     code: `
 
@@ -335,6 +325,6 @@ export const working = [
      printf(a(b(c(d(e(f(1)))))));
      return 0;
    }`,
-    output: 7, // All operations are identity operations, returns input
+    output: 7,
   },
 ];

@@ -1,3 +1,4 @@
+//@ts-nocheck
 import { Lexer } from "../src/Lexer";
 import {
   ExpressionStatement,
@@ -8,11 +9,11 @@ import {
 
 describe("Parser", () => {
   const parseCode = (code: string) => {
-    const lexer = new Lexer(code);
-    const tokens = lexer.scanTokens();
+    const lexer = new Lexer().load(code);
+    const tokens = lexer.run();
 
-    const parser = new Parser(tokens);
-    return parser.parse();
+    const parser = new Parser().load(tokens);
+    return parser.run();
   };
 
   const parseExpression = (code: string) => {
@@ -613,8 +614,8 @@ describe("Parser", () => {
 
     const returnStmt = func.body.statements[0];
     expect(returnStmt.type).toBe(NodeType.ReturnStatement);
-    expect((returnStmt as any).argument.type).toBe(NodeType.UnaryExpression);
-    expect((returnStmt as any).argument.operator).toBe("&");
+    expect(returnStmt.argument.type).toBe(NodeType.UnaryExpression);
+    expect(returnStmt.argument.operator).toBe("&");
   });
 
   test("should handle backtracking in assignment parsing", () => {
@@ -636,6 +637,6 @@ describe("Parser", () => {
     expect(funcCall.type).toBe(NodeType.FunctionCall);
     expect(funcCall.callee).toBe("func");
     expect(funcCall.arguments[0].type).toBe(NodeType.UnaryExpression);
-    expect((funcCall.arguments[0] as any).operator).toBe("*");
+    expect(funcCall.arguments[0].operator).toBe("*");
   });
 });

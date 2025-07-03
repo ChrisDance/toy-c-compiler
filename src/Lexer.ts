@@ -9,7 +9,7 @@ export enum TokenType {
   IDENTIFIER = "IDENTIFIER",
   NUMBER = "NUMBER",
 
-  MULTIPLY = "MULTIPLY", // Also used for pointer dereference
+  MULTIPLY = "MULTIPLY",
   PLUS = "PLUS",
   DIVIDE = "DIVIDE",
   MINUS = "MINUS",
@@ -17,7 +17,7 @@ export enum TokenType {
   LESS_THAN = "LESS_THAN",
   GREATER_THAN = "GREATER_THAN",
   EQUAL_EQUAL = "EQUAL_EQUAL",
-  AMPERSAND = "AMPERSAND", // For address-of operator &
+  AMPERSAND = "AMPERSAND",
 
   LEFT_PAREN = "LEFT_PAREN",
   RIGHT_PAREN = "RIGHT_PAREN",
@@ -37,18 +37,23 @@ export interface Token {
 }
 
 export class Lexer {
-  private source: string;
+  private source!: string;
   private tokens: Token[] = [];
 
   private start = 0;
   private current = 0;
   private line = 1;
 
-  constructor(source: string) {
+  load(source: string): Lexer {
     this.source = source;
+    this.tokens = [];
+    this.start = 0;
+    this.current = 0;
+    this.line = 1;
+    return this;
   }
 
-  scanTokens(): Token[] {
+  run(): Token[] {
     while (!this.isAtEnd()) {
       this.start = this.current;
       this.scanToken();
@@ -97,7 +102,6 @@ export class Lexer {
       case "/":
         if (this.peek() === "/") {
           while (this.advance() != "\n") {}
-          console.log("NEWLINE");
         } else {
           this.addToken(TokenType.DIVIDE);
         }

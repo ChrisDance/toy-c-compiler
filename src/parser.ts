@@ -16,6 +16,7 @@ export enum NodeType {
   UnaryExpression = "UnaryExpression",
   Identifier = "Identifier",
   NumberLiteral = "NumberLiteral",
+  /*null-object pattern */
   VoidExpression = "VoidExpression",
 }
 
@@ -60,7 +61,6 @@ export interface BlockStatement extends Node {
 }
 
 export type Statement =
-  | any
   | ReturnStatement
   | VariableDeclaration
   | ExpressionStatement
@@ -134,17 +134,21 @@ export interface NumberLiteral extends Node {
   value: number;
 }
 
-/** Enhanced parser supporting int pointers while maintaining simplicity */
-
 export class Parser {
-  private tokens: Token[];
+  private tokens!: Token[];
   private current: number = 0;
 
-  constructor(tokens: Token[]) {
+  load(tokens: Token[]): Parser {
     this.tokens = tokens;
+    this.current = 0;
+    return this;
   }
 
-  parse(): Program {
+  run(): Program {
+    if (!this.tokens) {
+      throw new Error("No tokens loaded");
+    }
+
     if (this.tokens.length <= 1) {
       throw new Error("Cannot parse empty program");
     }
@@ -152,6 +156,12 @@ export class Parser {
     const functions: FunctionDeclaration[] = [];
 
     while (!this.isAtEnd()) {
+      /*to support:
+      int i;
+      int main() {return i;}
+
+      we'd need to alter this beyond just parsing functions at the top level.
+      */
       const func = this.parseFunction();
       this.validateFunction(func);
       functions.push(func);
@@ -178,11 +188,11 @@ export class Parser {
   }
 
   private parseFunction(): FunctionDeclaration {
-    // Parse return type (int, int*, or void)
+    /*  parse return type (int, int*, or void) */
     let returnType: string;
     if (this.match(TokenType.INT)) {
       returnType = "int";
-      // Check for pointer type
+      /*check for pointer type*/
       if (this.match(TokenType.MULTIPLY)) {
         returnType = "int*";
       }
@@ -205,7 +215,7 @@ export class Parser {
         this.consume(TokenType.INT, "Expect parameter type.");
 
         let paramType = "int";
-        // Check for pointer parameter
+        /*  check for pointer parameter */
         if (this.match(TokenType.MULTIPLY)) {
           paramType = "int*";
         }
@@ -272,16 +282,14 @@ export class Parser {
       return this.parseBlock();
     }
 
-    // Handle assignment statements including pointer dereferencing
     if (this.check(TokenType.IDENTIFIER) || this.check(TokenType.MULTIPLY)) {
       const checkpoint = this.current;
 
       try {
-        // Try to parse as assignment
         let target: string | UnaryExpression;
 
         if (this.match(TokenType.MULTIPLY)) {
-          // Dereference assignment: *ptr = value
+          /*dereference assignment: *ptr = value*/
           const operand = this.parsePrimary();
           target = {
             type: NodeType.UnaryExpression,
@@ -289,7 +297,7 @@ export class Parser {
             operand,
           };
         } else {
-          // Regular variable assignment
+          /*regular variable assignment*/
           const identifier = this.advance();
           target = identifier.lexeme;
         }
@@ -304,12 +312,12 @@ export class Parser {
             value,
           };
         } else {
-          // Not an assignment, backtrack and parse as expression
+          /* not an assignment, backtrack and parse as expression*/
           this.current = checkpoint;
           return this.parseExpressionStatement();
         }
       } catch (error) {
-        // If parsing as assignment fails, backtrack and try as expression
+        /*if parsing as assignment fails, backtrack and try as expression*/
         this.current = checkpoint;
         return this.parseExpressionStatement();
       }
@@ -341,7 +349,7 @@ export class Parser {
   private parseReturnStatement(): ReturnStatement {
     let expression: Expression | null = null;
 
-    // Check if there's an expression after return
+    /* check if there's an expression after return*/
     if (!this.check(TokenType.SEMICOLON)) {
       expression = this.parseExpression();
     } else {
@@ -360,7 +368,6 @@ export class Parser {
     /* INT token was already consumed in parseStatement */
     let varType = "int";
 
-    // Check for pointer type
     if (this.match(TokenType.MULTIPLY)) {
       varType = "int*";
     }
@@ -455,10 +462,9 @@ export class Parser {
     return expr;
   }
 
-  // New: Parse unary expressions (address-of and dereference)
   private parseUnary(): Expression {
     if (this.match(TokenType.AMPERSAND)) {
-      // Address-of operator: &variable
+      /*  address-of operator: &variable*/
       const operator = this.previous().lexeme;
       const operand = this.parseUnary();
       return {
@@ -469,7 +475,7 @@ export class Parser {
     }
 
     if (this.match(TokenType.MULTIPLY)) {
-      // Dereference operator: *pointer
+      /* dereference operator: *pointer*/
       const operator = this.previous().lexeme;
       const operand = this.parseUnary();
       return {
@@ -498,7 +504,7 @@ export class Parser {
         const args: Expression[] = [];
 
         if (!this.check(TokenType.RIGHT_PAREN)) {
-          /** if we want multiple args */
+          /** multiple args */
           do {
             args.push(this.parseExpression());
           } while (this.match(TokenType.COMMA));
@@ -576,10 +582,10 @@ export class Parser {
 
   private validateFunction(func: FunctionDeclaration): void {
     if (func.returnType === "void") {
-      // Check that all return statements in void functions have no value
+      /*check that all return statements in void functions have no value*/
       this.validateVoidReturns(func.body);
     } else {
-      // Check that all return statements in non-void functions have a value
+      /*or that non-void functions have a value*/
       this.validateNonVoidReturns(func.body);
     }
   }
